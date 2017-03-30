@@ -151,10 +151,6 @@ void ble_serialization_callback (int callback_type, int rx_len, int c, void* oth
 //
 
 uint32_t ser_app_hal_hw_init() {
-    // Configure the pin for the reset pin. We don't have the actual !RESET
-    // pin pinned to the Storm, so we will use this one.
-    gpio_enable_output(STORM_INT);
-
     return NRF_SUCCESS;
 }
 
@@ -163,11 +159,9 @@ void ser_app_hal_delay (uint32_t ms)  {
 }
 
 void ser_app_hal_nrf_reset_pin_clear() {
-    gpio_clear(STORM_INT);
 }
 
 void ser_app_hal_nrf_reset_pin_set() {
-    gpio_set(STORM_INT);
 }
 
 void ser_app_hal_nrf_evt_irq_priority_set () {
