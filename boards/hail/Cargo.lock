@@ -7,6 +7,7 @@ dependencies = [
  "kernel 0.1.0",
  "rust-libcore 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "sam4l 0.1.0",
+ "tock_kernel_attributes 0.1.0",
 ]
 
 [[package]]
@@ -45,6 +46,10 @@ dependencies = [
  "kernel 0.1.0",
  "rust-libcore 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "tock_kernel_attributes"
+version = "0.1.0"
 
 [metadata]
 "checksum rust-libcore 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ae7a33830cc02d03ae1e50057d0e4e4b1a84be09bfb158bf95e9c3f3373aa453"
