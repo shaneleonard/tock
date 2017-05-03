@@ -24,3 +24,6 @@ cortexm0 = { path = "../../arch/cortex-m0" }
 capsules = { path = "../../capsules" }
 kernel = { path = "../../kernel" }
 nrf51 = { path = "../../chips/nrf51" }
+
+[build-dependencies]
+tock_kernel_attributes = { path = "../../tools/tock_kernel_attributes" }
