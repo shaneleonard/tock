@@ -11,4 +11,4 @@ pub mod math;
 pub use self::list::{List, ListLink, ListNode};
 pub use self::queue::Queue;
 pub use self::ring_buffer::RingBuffer;
-pub use self::volatile_cell::VolatileCell;
+pub use self::volatile_cell::{VolatileCell, VolatileCellRO, VolatileCellWO};

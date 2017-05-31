@@ -1,6 +1,6 @@
 use core::{cmp, intrinsics, mem};
 use core::cell::Cell;
-use kernel::common::VolatileCell;
+use kernel::common::{VolatileCell, VolatileCellRO, VolatileCellWO};
 
 use kernel::common::take_cell::TakeCell;
 use nvic;
@@ -16,13 +16,13 @@ struct DMARegisters {
     transfer_counter: VolatileCell<u32>, // 0x08
     memory_address_reload: VolatileCell<u32>,
     transfer_counter_reload: VolatileCell<u32>,
-    control: VolatileCell<u32>,
+    control: VolatileCellWO<u32>,
     mode: VolatileCell<u32>,
-    status: VolatileCell<u32>,
+    status: VolatileCellRO<u32>,
     interrupt_enable: VolatileCell<u32>,
     interrupt_disable: VolatileCell<u32>,
-    interrupt_mask: VolatileCell<u32>,
-    interrupt_status: VolatileCell<u32>,
+    interrupt_mask: VolatileCellRO<u32>,
+    interrupt_status: VolatileCellRO<u32>,
     _unused: [usize; 4],
 }
 

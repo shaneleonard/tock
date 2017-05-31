@@ -19,7 +19,7 @@ use core::{cmp, mem, slice};
 use core::cell::Cell;
 use dma;
 use kernel::ReturnCode;
-use kernel::common::VolatileCell;
+use kernel::common::{VolatileCell, VolatileCellRO, VolatileCellWO};
 use kernel::common::math;
 use kernel::common::take_cell::TakeCell;
 use kernel::hil;
@@ -131,24 +131,24 @@ pub struct Adc {
 #[repr(C, packed)]
 pub struct AdcRegisters {
     // From page 1005 of SAM4L manual
-    pub cr: VolatileCell<u32>, // Control               (0x00)
-    pub cfg: VolatileCell<u32>, // Configuration        (0x04)
-    pub sr: VolatileCell<u32>, // Status                (0x08)
-    pub scr: VolatileCell<u32>, // Status clear         (0x0c)
-    pub pad: VolatileCell<u32>, // padding/reserved
-    pub seqcfg: VolatileCell<u32>, // Sequencer config  (0x14)
-    pub cdma: VolatileCell<u32>, // Config DMA          (0x18)
-    pub tim: VolatileCell<u32>, // Timing config        (0x1c)
-    pub itimer: VolatileCell<u32>, // Internal timer    (0x20)
-    pub wcfg: VolatileCell<u32>, // Window config       (0x24)
-    pub wth: VolatileCell<u32>, // Window threshold     (0x28)
-    pub lcv: VolatileCell<u32>, // Last converted value (0x2c)
-    pub ier: VolatileCell<u32>, // Interrupt enable     (0x30)
-    pub idr: VolatileCell<u32>, // Interrupt disable    (0x34)
-    pub imr: VolatileCell<u32>, // Interrupt mask       (0x38)
-    pub calib: VolatileCell<u32>, // Calibration        (0x3c)
-    pub version: VolatileCell<u32>, // Version          (0x40)
-    pub parameter: VolatileCell<u32>, // Parameter      (0x44)
+    pub cr: VolatileCellWO<u32>, //        Control              (0x00)
+    pub cfg: VolatileCell<u32>, //         Configuration        (0x04)
+    pub sr: VolatileCellRO<u32>, //        Status               (0x08)
+    pub scr: VolatileCellWO<u32>, //       Status clear         (0x0c)
+    pub _reserved0: [u32; 4],
+    pub seqcfg: VolatileCell<u32>, //      Sequencer config     (0x14)
+    pub cdma: VolatileCellWO<u32>, //      Config DMA           (0x18)
+    pub tim: VolatileCell<u32>, //         Timing config        (0x1c)
+    pub itimer: VolatileCell<u32>, //      Internal timer       (0x20)
+    pub wcfg: VolatileCell<u32>, //        Window config        (0x24)
+    pub wth: VolatileCell<u32>, //         Window threshold     (0x28)
+    pub lcv: VolatileCellRO<u32>, //       Last converted value (0x2c)
+    pub ier: VolatileCellWO<u32>, //       Interrupt enable     (0x30)
+    pub idr: VolatileCellWO<u32>, //       Interrupt disable    (0x34)
+    pub imr: VolatileCellRO<u32>, //       Interrupt mask       (0x38)
+    pub calib: VolatileCell<u32>, //       Calibration          (0x3c)
+    pub version: VolatileCellRO<u32>, //   Version              (0x40)
+    pub parameter: VolatileCellRO<u32>, // Parameter            (0x44)
 }
 // Page 59 of SAM4L data sheet
 pub const BASE_ADDRESS: *mut AdcRegisters = 0x40038000 as *mut AdcRegisters;
