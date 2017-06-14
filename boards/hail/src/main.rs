@@ -351,6 +351,24 @@ pub unsafe fn reset_handler() {
         capsules::crc::Crc::new(&mut sam4l::crccu::CRCCU, kernel::Container::create()));
     sam4l::crccu::CRCCU.set_client(crc);
 
+	// Port Signpost Tock	
+    let port_signpost_tock_i2c = static_init!(
+        capsules::virtual_i2c::I2CDevice,
+        capsules::virtual_i2c::I2CDevice::new(sensors_i2c, 0x40));
+    
+	let port_signpost_tock_virtual_alarm = static_init!(
+        VirtualMuxAlarm<'static, sam4l::ast::Ast>,
+        VirtualMuxAlarm::new(mux_alarm));
+    
+	let port_signpost_tock = static_init!(
+        capsules::port_signpost_tock::PortSignpostTock<'static, VirtualMuxAlarm<'static, sam4l::ast::Ast>>,
+        capsules::port_signpost_tock::PortSignpostTock::new(port_signpost_tock_i2c,
+            port_signpost_tock_virtual_alarm,
+            &mut capsules::port_signpost_tock::BUFFER));
+    port_signpost_tock_i2c.set_client(port_signpost_tock);
+   	port_signpost_tock_virtual_alarm.set_client(port_signpost_tock);
+
+
 
     let hail = Hail {
         console: console,
