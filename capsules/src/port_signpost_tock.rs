@@ -217,9 +217,10 @@ enum State {
 
 }
 
+static bool master_write_yield_flag = false;
 
 pub struct PortSignpostTock<'a, A: time::Alarm + 'a> {
-	i2c: 		&'a i2c::I2CDevice,
+	i2c: 		&'a I2CMasterSlaveDriver,
 	alarm:		&'a A,
 	callback:	Cell<Option<Callback>>,
 	state:		Cell<State>,
@@ -227,24 +228,56 @@ pub struct PortSignpostTock<'a, A: time::Alarm + 'a> {
 }
 
 impl<'a, A: time::Alarm + 'a> PortSignpostTock<'a, A> {
-	pub fn new(i2c: &'a I2CMasterSlaveDriver, alarm: &'a A, buffer: &'static mut [u8]) -> PortSignpostTock<'a, A> {
+	pub fn new(i2c: &'a I2CMasterSlaveDriver, alarm: &'a A) -> PortSignpostTock<'a, A> {
 
 		PortSignpostTock {
 			i2c:  		i2c,
 			alarm: 		alarm,
 			callback: 	Cell::new(None),
 			state:		Cell::new(State::Idle),
-			buffer:		TakeCell::new(buffer),	
 		}
 	}
 
-	pub fn init(&self, uint8_t i2c_address) {
-			
+	fn set_master_write_buffer(&self) -> ReturnCode {
+		self.i2c.app.master_tx_buffer = BUFFER0;	
+		return ReturnCode::SUCCESS;
 	}
 
-	pub fn set_master_write_buffer(&self) {
-		i2c.
+	fn set_slave_read_buffer(&self) -> ReturnCode {
+		self.i2c.app.slave_rx_buffer = BUFFER1;		
+		return ReturnCode::SUCCESS;
 	}
+	
+	fn set_slave_address(&self, i2c_address as u8) -> ReturnCode {
+		if address > 0x7f {
+			return ReturnCode::EINVAL;
+		}
+		hil::i2c::I2CSlave::set_address(self.i2c, i2c_address);
+		return ReturnCode::SUCCESS;
+	}
+
+	fn set_callback(&self) {
+			
+	}
+	
+	pub fn init(&self, i2c_address as u8) {
+	
+	}
+
+	pub fn i2c_master_write(&self, dest as u8) {
+
+
+	}
+
+	pub fn i2c_slave_listen() {
+		
+
+	}
+
+	pub fn i2c_slave_read_setup() {
+
+	}
+
 }
 
 
