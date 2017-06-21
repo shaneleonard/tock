@@ -1,3 +1,8 @@
+//! Board file for Hail development platform.
+//!
+//! - https://github.com/helena-project/tock/tree/master/boards/hail
+//! - https://github.com/lab11/hail
+
 #![no_std]
 #![no_main]
 #![feature(asm,const_fn,drop_types_in_const,lang_items,compiler_builtins_lib)]
@@ -86,6 +91,7 @@ struct Hail {
     rng: &'static capsules::rng::SimpleRng<'static, sam4l::trng::Trng<'static>>,
     ipc: kernel::ipc::IPC,
     crc: &'static capsules::crc::Crc<'static, sam4l::crccu::Crccu<'static>>,
+    dac: &'static capsules::dac::Dac<'static>,
 }
 
 impl Platform for Hail {
@@ -110,6 +116,8 @@ impl Platform for Hail {
             14 => f(Some(self.rng)),
 
             16 => f(Some(self.crc)),
+
+            26 => f(Some(self.dac)),
 
             0xff => f(Some(&self.ipc)),
             _ => f(None),
@@ -350,6 +358,11 @@ pub unsafe fn reset_handler() {
         capsules::crc::Crc<'static, sam4l::crccu::Crccu<'static>>,
         capsules::crc::Crc::new(&mut sam4l::crccu::CRCCU, kernel::Container::create()));
     sam4l::crccu::CRCCU.set_client(crc);
+    
+	// DAC
+    let dac = static_init!(
+        capsules::dac::Dac<'static>,
+        capsules::dac::Dac::new(&mut sam4l::dac::DAC));
 
 	// Port Signpost Tock	
     let port_signpost_tock_i2c = static_init!(
@@ -368,8 +381,6 @@ pub unsafe fn reset_handler() {
     port_signpost_tock_i2c.set_client(port_signpost_tock);
    	port_signpost_tock_virtual_alarm.set_client(port_signpost_tock);
 
-
-
     let hail = Hail {
         console: console,
         gpio: gpio,
@@ -385,6 +396,7 @@ pub unsafe fn reset_handler() {
         rng: rng,
         ipc: kernel::ipc::IPC::new(),
         crc: crc,
+        dac: dac,
     };
 
     // Need to reset the nRF on boot

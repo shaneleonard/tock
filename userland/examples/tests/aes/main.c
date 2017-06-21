@@ -27,7 +27,7 @@ static void aes_async(int callback_type,
       printf("%02x ", data[i]);
     }
     printf("\r\n");
-  }else if (callback_type == 2)  {
+  } else if (callback_type == 2) {
     printf("async decrypt:\r\n");
     for (uint8_t i = 0; i < sizeof(data); i++) {
       printf("%02x ", data[i]);
@@ -171,7 +171,6 @@ int main(void)
     printf("\rCTR test #2 (decryption SP 800-38a tests): PASSED\n");
     printf("\r\n");
   }
-
 
   // Test that asyncronous version works as well
   err = aes128_encrypt_ctr(data, sizeof(data), ctr, sizeof(ctr), aes_async);
