@@ -10,7 +10,6 @@ use kernel::hil;
 use kernel::hil::gpio;
 use kernel::hil::i2c;
 use kernel::hil::time;
-use kernel::ReturnCode
 
 
 enum initialization_state {
@@ -45,110 +44,104 @@ enum MasterAction {
 	Write,
 }
 
-pub struct I2CMasterSlaveDriver<'a> {
-	i2c: &'a hil::i2c::I2CMasterSlave,
-	listening:			Cell<bool>,	
-	master_action: 		Cell<MasterAction>,
-	master_buffer:		TakeCell <'static, [u8]>,
-	slave_buffer1:		TakeCell <'static, [u8]>,
-	slave_buffer2:		TakeCell <'static, [u8]>,
-}
-
-
-
 /// States of the I2C protocol for Signbus
 #[derive(Clone,Copy,PartialEq)]
 enum State {
 	Idle,
 	Init,
+	MasterWrite,
+	MasterRead,
+	SlaveWrite,
+	SlaveRead,
 }
 
 pub struct PortSignpostTock<'a, A: time::Alarm + 'a> {
-	i2cDriver: 		&'a I2CMasterSlaveDriver,
+	i2c: 		&'a hil::i2c::I2CMasterSlave,
 	alarm:		&'a A,
+	
+	listening:	Cell<bool>,
+	master_action: 		Cell<MasterAction>,
+	
+	master_tx_buffer:		TakeCell <'static, [u8]>,
+	master_rx_buffer:		TakeCell <'static, [u8]>,
+	slave_tx_buffer:		TakeCell <'static, [u8]>,
+	slave_rx_buffer:		TakeCell <'static, [u8]>,
 
-	master_write_yield_flag: mut bool,
-	master_write_len_or_rc: mut i32,
-
-	callback:	Cell<Option<Callback>>,
 	state:		Cell<State>,
-
-	master_write_buf:	TakeCell <'static, [u8]>,
-	slave_read_buf:		TakeCell <'static, [u8]>,
 }
 
 impl<'a, A: time::Alarm + 'a> PortSignpostTock<'a, A> {
-	pub fn new(	i2cDriver: &'a I2CMasterSlaveDriver, alarm: &'a A) -> PortSignpostTock<'a, A> {
+	pub fn new(	i2c: &'a I2CMasterSlave, alarm: &'a A) -> PortSignpostTock<'a, A> {
 		PortSignpostTock {
-			i2cDriver:  i2cDriver,
+			i2c:  		i2c,
 			alarm: 		alarm,
 
-			master_write_yield_flag: 	Cell::new(false),
-			master_write_len_or_rc: 	Cell::new(0),
+			listening:				
+			master_action:
 			
-			callback: 	Cell::new(None),
+			master_tx_buffer:		TakeCell::new(master_tx_buffer),
+			master_rx_buffer:		TakeCell::new(master_rx_buffer),
+			slave_tx_buffer:		TakeCell::new(slave_tx_buffer),
+			slave_rx_buffer:		TakeCell::new(slave_rx_buffer),
+			
 			state:		Cell::new(State::Idle),
-
-			master_write_buf:		TakeCell::new(master_write_buf),
-			slave_read_buf:			TakeCell::new(slave_read_buf),
-
 		}
 	}
-/*
-	fn set_master_write_buffer(&self) -> ReturnCode {
-		self.i2c.app.master_tx_buffer = BUFFER0;	
-		return ReturnCode::SUCCESS;
-	}
 	
-	fn set_slave_read_buffer(&self) -> ReturnCode {
-		self.i2c.app.slave_rx_buffer = BUFFER1;		
-		return ReturnCode::SUCCESS;
-	}
-*/	
 	fn set_slave_address(&self, i2c_address as u8) -> ReturnCode {
+
 		if i2c_address > 0x7f {
-			return ReturnCode::EINVAL;
+			ReturnCode::EINVAL;
 		}
 		hil::i2c::I2CSlave::set_address(self.i2c, i2c_address);
-		return ReturnCode::SUCCESS;
+
+		ReturnCode::SUCCESS;
 	}
-/*
-	fn set_callback(&self, callback: Callback) -> ReturnCode {
-		self.i2c.app.callback = callback;
-		return ReturnCode::SUCCESS;	
-	}
-*/
 	
-	pub fn init(&self, i2c_address as u8) {
+	pub fn init(&self, i2c_address as u8) -> ReturnCode {
 		
 		let r = set_slave_address(i2c_address);
 		if r == ReturnCode::SUCCESS {
 			self.state.set(State::Init);
 		}
 
+		return r;
 	}
 
-	pub fn i2c_master_write(&self, address as u8, len as u32) {
-		self.master_write_yield_flag = false;
+	pub fn i2c_master_write(&self, address as u8, len as u32) -> ReturnCode {
 	
-		self.master_tx_buffer.as_mut().map(|kernel_buffer|{
+		self.master_tx_buffer.as_mut().map(|buffer|{
 		
 			hil::i2c::I2CMaster::enable(self.i2c);
-			hil::i2c::I2CMaster::write(self.i2c, address, kernel_buffer, len as u8);
+			hil::i2c::I2CMaster::write(self.i2c, address, buffer, len as u8);
+		});
+		
+		// TODO: yield() or implement client callback
 
+		ReturnCode::SUCCESS;
+	}
+
+	pub fn i2c_slave_listen(&self) -> ReturnCode {
+
+		self.slave_rx_buffer.take().map(|buffer| {
+			hil::i2c::I2CSlave::write_receive(self.i2c, buffer, 255);
 		});
 
-		// yield();
-		// return length of message
+		hil::i2c::I2CSlave::enable(self.i2c);
+		hil::i2c::I2CSlave::listen(self.i2c);
+
+
+		self.state.set(State::SlaveRead);
+		ReturnCode::SUCCESS;	
 	}
 
-	pub fn i2c_slave_listen() {
-		
+	pub fn i2c_slave_read_setup(&self, len as u32) -> ReturnCode {
+		self.slave_tx_buffer.as_mut().map(|buffer| {
+			hil::i2c::I2CSlave::read_send(self.i2c, buffer, len as u8);
+		});
 
-	}
-
-	pub fn i2c_slave_read_setup() {
-
+		self.state.set(State::MasterRead);
+		ReturnCode::SUCCESS;	
 	}
 
 }
