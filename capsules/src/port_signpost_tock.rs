@@ -12,6 +12,27 @@ use kernel::hil::i2c;
 use kernel::hil::time;
 use kernel::ReturnCode
 
+
+enum initialization_state {
+	Start = 0,
+	Isolated = 1,
+	KeyExchange = 2,
+	Done = 3,
+} initialization_state_t;
+
+enum initialization_message_type {
+	InitializationDeclare = 0,
+	InitializationKeyExchange = 1,
+	InitializationGetMods = 2,
+}
+
+enum module_address {
+	ModuleAddressController = 0x20,
+	ModuleAddressStorage = 0x21,
+	ModuleAddressRadio = 0x22,
+} module_address_t;
+
+
 // Buffers to use for I2C messages
 pub static mut BUFFER0: [u8; 256] = [0; 256];
 pub static mut BUFFER1: [u8; 256] = [0; 256];
@@ -35,26 +56,6 @@ pub struct I2CMasterSlaveDriver<'a> {
 
 
 
-enum initialization_state {
-	Start = 0,
-	Isolated = 1,
-	KeyExchange = 2,
-	Done = 3,
-} initialization_state_t;
-
-enum initialization_message_type {
-	InitializationDeclare = 0,
-	InitializationKeyExchange = 1,
-	InitializationGetMods = 2,
-}
-
-enum module_address {
-	ModuleAddressController = 0x20,
-	ModuleAddressStorage = 0x21,
-	ModuleAddressRadio = 0x22,
-} module_address_t;
-
-
 /// States of the I2C protocol for Signbus
 #[derive(Clone,Copy,PartialEq)]
 enum State {
@@ -63,7 +64,7 @@ enum State {
 }
 
 pub struct PortSignpostTock<'a, A: time::Alarm + 'a> {
-	i2c: 		&'a hil::i2c::I2CMasterSlave,
+	i2cDriver: 		&'a I2CMasterSlaveDriver,
 	alarm:		&'a A,
 
 	master_write_yield_flag: mut bool,
@@ -77,12 +78,9 @@ pub struct PortSignpostTock<'a, A: time::Alarm + 'a> {
 }
 
 impl<'a, A: time::Alarm + 'a> PortSignpostTock<'a, A> {
-	pub fn new(	i2c: &'a I2CMasterSlave, 
-				alarm: &'a A
-				) -> PortSignpostTock<'a, A> {
-
+	pub fn new(	i2cDriver: &'a I2CMasterSlaveDriver, alarm: &'a A) -> PortSignpostTock<'a, A> {
 		PortSignpostTock {
-			i2c:  		i2c,
+			i2cDriver:  i2cDriver,
 			alarm: 		alarm,
 
 			master_write_yield_flag: 	Cell::new(false),
@@ -132,10 +130,16 @@ impl<'a, A: time::Alarm + 'a> PortSignpostTock<'a, A> {
 
 	pub fn i2c_master_write(&self, address as u8, len as u32) {
 		self.master_write_yield_flag = false;
-
-		self.
 	
+		self.master_tx_buffer.as_mut().map(|kernel_buffer|{
 		
+			hil::i2c::I2CMaster::enable(self.i2c);
+			hil::i2c::I2CMaster::write(self.i2c, address, kernel_buffer, len as u8);
+
+		});
+
+		// yield();
+		// return length of message
 	}
 
 	pub fn i2c_slave_listen() {
