@@ -38,3 +38,5 @@ pub mod ltc294x;
 pub mod mcp23008;
 pub mod gpio_async;
 pub mod max17205;
+pub mod port_signpost_tock;
+pub mod signbus_io_interface;

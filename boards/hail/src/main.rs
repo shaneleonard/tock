@@ -365,14 +365,29 @@ pub unsafe fn reset_handler() {
         capsules::dac::Dac::new(&mut sam4l::dac::DAC));
 
 	// Port Signpost Tock	
-    let port_signpost_tock_i2c = static_init!(
-        capsules::virtual_i2c::I2CDevice,
-        capsules::virtual_i2c::I2CDevice::new(sensors_i2c, 0x40));
-    
+    let port_signpost_tock = static_init!(
+		capsules::port_signpost_tock::PortSignpostTock<'static>,
+		capsules::port_signpost_tock::PortSignpostTock::new(&sam4l::i2c::I2C0,
+			&mut capsules::port_signpost_tock::BUFFER0,
+			&mut capsules::port_signpost_tock::BUFFER1,
+			&mut capsules::port_signpost_tock::BUFFER2,
+			&mut capsules::port_signpost_tock::BUFFER3
+		));
+	sam4l::i2c::I2C0.set_master_client(port_signpost_tock); 
+	sam4l::i2c::I2C0.set_slave_client(port_signpost_tock); 
+
+	// Signbus IO Interface
+	let signbus_io_interface = static_init!(
+		capsules::signbus_io_interface::SignbusIOInterface<'static>,
+		capsules::signbus_io_interface::SignbusIOInterface::new(port_signpost_tock));
+
+	signbus_io_interface.signbus_io_init(0x28);
+
+
+/* 
 	let port_signpost_tock_virtual_alarm = static_init!(
         VirtualMuxAlarm<'static, sam4l::ast::Ast>,
         VirtualMuxAlarm::new(mux_alarm));
-    
 	let port_signpost_tock = static_init!(
         capsules::port_signpost_tock::PortSignpostTock<'static, VirtualMuxAlarm<'static, sam4l::ast::Ast>>,
         capsules::port_signpost_tock::PortSignpostTock::new(port_signpost_tock_i2c,
@@ -380,7 +395,7 @@ pub unsafe fn reset_handler() {
             &mut capsules::port_signpost_tock::BUFFER));
     port_signpost_tock_i2c.set_client(port_signpost_tock);
    	port_signpost_tock_virtual_alarm.set_client(port_signpost_tock);
-
+*/
     let hail = Hail {
         console: console,
         gpio: gpio,

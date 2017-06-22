@@ -11,27 +11,6 @@ use kernel::hil::gpio;
 use kernel::hil::i2c;
 use kernel::hil::time;
 
-
-enum initialization_state {
-	Start = 0,
-	Isolated = 1,
-	KeyExchange = 2,
-	Done = 3,
-} initialization_state_t;
-
-enum initialization_message_type {
-	InitializationDeclare = 0,
-	InitializationKeyExchange = 1,
-	InitializationGetMods = 2,
-}
-
-enum module_address {
-	ModuleAddressController = 0x20,
-	ModuleAddressStorage = 0x21,
-	ModuleAddressRadio = 0x22,
-} module_address_t;
-
-
 // Buffers to use for I2C messages
 pub static mut BUFFER0: [u8; 256] = [0; 256];
 pub static mut BUFFER1: [u8; 256] = [0; 256];
@@ -55,12 +34,8 @@ enum State {
 	SlaveRead,
 }
 
-pub struct PortSignpostTock<'a, A: time::Alarm + 'a> {
+pub struct PortSignpostTock<'a> {
 	i2c: 		&'a hil::i2c::I2CMasterSlave,
-	alarm:		&'a A,
-	
-	listening:	Cell<bool>,
-	master_action: 		Cell<MasterAction>,
 	
 	master_tx_buffer:		TakeCell <'static, [u8]>,
 	master_rx_buffer:		TakeCell <'static, [u8]>,
@@ -70,47 +45,48 @@ pub struct PortSignpostTock<'a, A: time::Alarm + 'a> {
 	state:		Cell<State>,
 }
 
-impl<'a, A: time::Alarm + 'a> PortSignpostTock<'a, A> {
-	pub fn new(	i2c: &'a I2CMasterSlave, alarm: &'a A) -> PortSignpostTock<'a, A> {
+impl<'a> PortSignpostTock<'a> {
+	pub fn new(	i2c: &'a hil::i2c::I2CMasterSlave,
+				master_tx_buffer: &'static mut [u8],
+				master_rx_buffer: &'static mut [u8],
+				slave_tx_buffer: &'static mut [u8],
+				slave_rx_buffer: &'static mut [u8]) -> PortSignpostTock<'a> {
 		PortSignpostTock {
 			i2c:  		i2c,
-			alarm: 		alarm,
-
-			listening:				
-			master_action:
-			
 			master_tx_buffer:		TakeCell::new(master_tx_buffer),
 			master_rx_buffer:		TakeCell::new(master_rx_buffer),
 			slave_tx_buffer:		TakeCell::new(slave_tx_buffer),
 			slave_rx_buffer:		TakeCell::new(slave_rx_buffer),
-			
 			state:		Cell::new(State::Idle),
 		}
 	}
 	
-	fn set_slave_address(&self, i2c_address as u8) -> ReturnCode {
+	fn set_slave_address(&self, i2c_address: u8) -> ReturnCode {
 
 		if i2c_address > 0x7f {
-			ReturnCode::EINVAL;
+			debug!("should not be here");
+			return ReturnCode::EINVAL;
 		}
 		hil::i2c::I2CSlave::set_address(self.i2c, i2c_address);
+		debug!("Should be here1");
 
-		ReturnCode::SUCCESS;
+		return ReturnCode::SUCCESS;
 	}
 	
-	pub fn init(&self, i2c_address as u8) -> ReturnCode {
+	pub fn init(&self, i2c_address: u8) -> ReturnCode {
 		
-		let r = set_slave_address(i2c_address);
+		let r = self.set_slave_address(i2c_address);
 		if r == ReturnCode::SUCCESS {
 			self.state.set(State::Init);
+			debug!("Should be here2");
 		}
 
 		return r;
 	}
 
-	pub fn i2c_master_write(&self, address as u8, len as u32) -> ReturnCode {
+	pub fn i2c_master_write(&self, address: u8, len: u32) -> ReturnCode {
 	
-		self.master_tx_buffer.as_mut().map(|buffer|{
+		self.master_tx_buffer.take().map(|buffer|{
 		
 			hil::i2c::I2CMaster::enable(self.i2c);
 			hil::i2c::I2CMaster::write(self.i2c, address, buffer, len as u8);
@@ -118,7 +94,7 @@ impl<'a, A: time::Alarm + 'a> PortSignpostTock<'a, A> {
 		
 		// TODO: yield() or implement client callback
 
-		ReturnCode::SUCCESS;
+		return ReturnCode::SUCCESS;
 	}
 
 	pub fn i2c_slave_listen(&self) -> ReturnCode {
@@ -132,21 +108,50 @@ impl<'a, A: time::Alarm + 'a> PortSignpostTock<'a, A> {
 
 
 		self.state.set(State::SlaveRead);
-		ReturnCode::SUCCESS;	
+		return ReturnCode::SUCCESS;
 	}
 
-	pub fn i2c_slave_read_setup(&self, len as u32) -> ReturnCode {
-		self.slave_tx_buffer.as_mut().map(|buffer| {
+	pub fn i2c_slave_read_setup(&self, len: u32) -> ReturnCode {
+		self.slave_tx_buffer.take().map(|buffer| {
 			hil::i2c::I2CSlave::read_send(self.i2c, buffer, len as u8);
 		});
 
 		self.state.set(State::MasterRead);
-		ReturnCode::SUCCESS;	
+		return ReturnCode::SUCCESS;	
 	}
 
 }
 
 
+impl<'a> i2c::I2CHwMasterClient for PortSignpostTock <'a> {
+	fn command_complete(&self, buffer: &'static mut [u8], error: hil::i2c::Error) {
+		//TODO: implement callback
+	}
+
+}
+
+
+impl<'a> i2c::I2CHwSlaveClient for PortSignpostTock <'a> {
+	fn command_complete(&self, 
+						buffer: &'static mut [u8], 
+						length: u8,
+						transmission_type: hil::i2c::SlaveTransmissionType) {
+		//TODO: implement callback
+	}
+
+	fn read_expected(&self) {
+		//TODO:	
+	}
+	
+	fn write_expected(&self) {
+		//TODO:
+	}
+
+}
+
+
+
+/*
 impl<'a, A: time::Alarm + 'a> i2c::I2CClient for PortSignpostTock<'a, A> {
 	// Link from I2C capsule to PortSignpostTock capsule
 	// fn command_complete ()
@@ -157,6 +162,6 @@ impl<'a, A: time::Alarm + 'a> time::Client for PortSignpostTock<'a, A> [
 	// fn fired ()
 }
 
-
+*/
 
 
