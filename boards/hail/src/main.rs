@@ -92,7 +92,7 @@ struct Hail {
     ipc: kernel::ipc::IPC,
     crc: &'static capsules::crc::Crc<'static, sam4l::crccu::Crccu<'static>>,
     dac: &'static capsules::dac::Dac<'static>,
-    app_flash: &'static capsules::app_flash_driver::AppFlash<'static, sam4l::flashcalw::FLASHCALW>,
+    app_flash: &'static capsules::app_flash_driver::AppFlash<'static>,
 }
 
 impl Platform for Hail {
@@ -368,11 +368,16 @@ pub unsafe fn reset_handler() {
 
     // App Flash
     pub static mut PAGEBUFFER: sam4l::flashcalw::Sam4lPage = sam4l::flashcalw::Sam4lPage::new();
+    let nv_to_page = static_init!(
+        capsules::nonvolatile_to_pages::NonvolatileToPages<'static, sam4l::flashcalw::FLASHCALW>,
+        capsules::nonvolatile_to_pages::NonvolatileToPages::new(&mut sam4l::flashcalw::FLASH_CONTROLLER,
+            &mut PAGEBUFFER));
+    hil::flash::Flash::set_client(&sam4l::flashcalw::FLASH_CONTROLLER, nv_to_page);
+
     let app_flash = static_init!(
-        capsules::app_flash_driver::AppFlash<'static, sam4l::flashcalw::FLASHCALW>,
-        capsules::app_flash_driver::AppFlash::new(&mut sam4l::flashcalw::FLASH_CONTROLLER,
-            kernel::Container::create(), &mut PAGEBUFFER));
-    hil::flash::Flash::set_client(&sam4l::flashcalw::FLASH_CONTROLLER, app_flash);
+        capsules::app_flash_driver::AppFlash<'static>,
+        capsules::app_flash_driver::AppFlash::new(nv_to_page,
+            kernel::Container::create(), &mut capsules::app_flash_driver::BUFFER));
     sam4l::flashcalw::FLASH_CONTROLLER.configure();
 
 

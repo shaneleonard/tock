@@ -10,10 +10,14 @@
 //! declaring `const` buffers.
 
 use core::cell::Cell;
+use core::cmp;
 use kernel::{AppId, AppSlice, Callback, Container, Driver, ReturnCode, Shared};
 use kernel::common::take_cell::TakeCell;
 use kernel::hil;
 use kernel::process::Error;
+
+
+pub static mut BUFFER: [u8; 600] = [0; 600];
 
 pub struct App {
     callback: Option<Callback>,
@@ -33,18 +37,18 @@ impl Default for App {
     }
 }
 
-pub struct AppFlash<'a, F: hil::flash::Flash + 'static> {
-    driver: &'a F,
+pub struct AppFlash<'a> {
+    driver: &'a hil::nonvolatile_storage::NonvolatileStorage,
     apps: Container<App>,
     current_app: Cell<Option<AppId>>,
-    buffer: TakeCell<'static, F::Page>,
+    buffer: TakeCell<'static, [u8]>,
 }
 
-impl<'a, F: hil::flash::Flash + 'a> AppFlash<'a, F> {
-    pub fn new(driver: &'a F,
+impl<'a> AppFlash<'a> {
+    pub fn new(driver: &'a hil::nonvolatile_storage::NonvolatileStorage,
                container: Container<App>,
-               buffer: &'static mut F::Page)
-               -> AppFlash<'a, F> {
+               buffer: &'static mut [u8])
+               -> AppFlash<'a> {
         AppFlash {
             driver: driver,
             apps: container,
@@ -65,16 +69,16 @@ impl<'a, F: hil::flash::Flash + 'a> AppFlash<'a, F> {
                 //     return EINVAL;
                 // }
 
-                // Check that the address is block aligned.
-                if flash_address % 512 != 0 {
-                    return ReturnCode::EINVAL;
-                }
+                // // Check that the address is block aligned.
+                // if flash_address % 512 != 0 {
+                //     return ReturnCode::EINVAL;
+                // }
 
                 let app_buffer_len = app.buffer.as_mut().map_or(0, |app_buffer| app_buffer.len());
 
-                if app_buffer_len != 512 {
-                    return ReturnCode::EINVAL;
-                }
+                // if app_buffer_len != 512 {
+                //     return ReturnCode::EINVAL;
+                // }
 
                 if self.current_app.get().is_none() {
                     self.current_app.set(Some(appid));
@@ -82,12 +86,13 @@ impl<'a, F: hil::flash::Flash + 'a> AppFlash<'a, F> {
                     app.buffer.as_mut().map_or(ReturnCode::ERESERVE, |app_buffer| {
                         // Copy contents to internal buffer and write it.
                         self.buffer.take().map_or(ReturnCode::ERESERVE, |buffer| {
-                            let d = &mut app_buffer.as_mut()[0..512];
-                            for (i, c) in buffer.as_mut()[0..512].iter_mut().enumerate() {
+                            let length = cmp::min(buffer.len(), app_buffer.len());
+                            let d = &mut app_buffer.as_mut()[0..length];
+                            for (i, c) in buffer.as_mut()[0..length].iter_mut().enumerate() {
                                 *c = d[i];
                             }
 
-                            self.driver.write_page(flash_address / 512, buffer)
+                            self.driver.write(buffer, flash_address, length)
                         })
                     })
 
@@ -110,10 +115,10 @@ impl<'a, F: hil::flash::Flash + 'a> AppFlash<'a, F> {
     }
 }
 
-impl<'a, F: hil::flash::Flash + 'a> hil::flash::Client<F> for AppFlash<'a, F> {
-    fn read_complete(&self, buffer: &'static mut F::Page, error: hil::flash::Error) {}
+impl<'a> hil::nonvolatile_storage::NonvolatileStorageClient for AppFlash<'a> {
+    fn read_done(&self, buffer: &'static mut [u8], length: usize) {}
 
-    fn write_complete(&self, buffer: &'static mut F::Page, error: hil::flash::Error) {
+    fn write_done(&self, buffer: &'static mut [u8], length: usize) {
         // Put our write buffer back.
         self.buffer.replace(buffer);
 
@@ -140,12 +145,13 @@ impl<'a, F: hil::flash::Flash + 'a> hil::flash::Client<F> for AppFlash<'a, F> {
                                 false
                             } else {
                                 // Copy contents to internal buffer and write it.
-                                let d = &mut app_buffer.as_mut()[0..512];
-                                for (i, c) in buffer.as_mut()[0..512].iter_mut().enumerate() {
+                                let length = cmp::min(buffer.len(), app_buffer.len());
+                                let d = &mut app_buffer.as_mut()[0..length];
+                                for (i, c) in buffer.as_mut()[0..length].iter_mut().enumerate() {
                                     *c = d[i];
                                 }
 
-                                self.driver.write_page(flash_address / 512, buffer) ==
+                                self.driver.write(buffer, flash_address, length) ==
                                 ReturnCode::SUCCESS
                             }
                         })
@@ -159,11 +165,9 @@ impl<'a, F: hil::flash::Flash + 'a> hil::flash::Client<F> for AppFlash<'a, F> {
             }
         }
     }
-
-    fn erase_complete(&self, error: hil::flash::Error) {}
 }
 
-impl<'a, F: hil::flash::Flash + 'a> Driver for AppFlash<'a, F> {
+impl<'a> Driver for AppFlash<'a> {
     /// Setup buffer to write from.
     ///
     /// ### `allow_num`
