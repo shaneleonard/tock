@@ -1,6 +1,7 @@
 //! Public traits for interfaces between Tock components.
 
 pub mod led;
+pub mod nonvolatile_storage;
 pub mod time;
 pub mod gpio;
 pub mod i2c;
