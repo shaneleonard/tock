@@ -20,10 +20,8 @@ use kernel::process::Error;
 #[derive(Clone,Copy,Debug,PartialEq)]
 enum State {
     Idle,
-
-    // Doing a read operation.
     Read,
-
+    Write,
 }
 
 pub struct NonvolatileToPages<'a, F: hil::flash::Flash + 'static> {
@@ -86,7 +84,35 @@ impl<'a, F: hil::flash::Flash + 'a> hil::nonvolatile_storage::NonvolatileStorage
             return ReturnCode::EBUSY;
         }
 
-        ReturnCode::SUCCESS
+        self.pagebuffer.take().map_or(ReturnCode::ERESERVE, move |pagebuffer| {
+            let page_size = pagebuffer.as_mut().len();
+
+            self.state.set(State::Write);
+            self.length.set(length);
+
+            if address % page_size == 0 && length >= page_size {
+                // This write is aligned to a page and we are writing an entire
+                // page or more.
+
+                // Copy data into page buffer.
+                for i in 0..page_size {
+                    pagebuffer.as_mut()[i] = buffer[i];
+                }
+
+                self.buffer.replace(buffer);
+                self.address.set(address + page_size);
+                self.remaining_length.set(length - page_size);
+                self.buffer_index.set(page_size);
+                self.driver.write_page(address / page_size, pagebuffer)
+            } else {
+                // Need to do a read first.
+                self.buffer.replace(buffer);
+                self.address.set(address);
+                self.remaining_length.set(length);
+                self.buffer_index.set(0);
+                self.driver.read_page(address / page_size, pagebuffer)
+            }
+        })
     }
 }
 
@@ -131,14 +157,72 @@ impl<'a, F: hil::flash::Flash + 'a> hil::flash::Client<F> for NonvolatileToPages
                     }
                 });
             }
+            State::Write => {
+                // We did a read because we're not page aligned on either or
+                // both ends.
+                self.buffer.take().map(move |buffer| {
+                    let page_size = pagebuffer.as_mut().len();
+                    // This will get us our offset into the page.
+                    let page_index = self.address.get() % page_size;
+                    // Length is either the rest of the page or how much we have left.
+                    let len = cmp::min(page_size - page_index, self.remaining_length.get());
+                    // And where we left off in the user buffer.
+                    let buffer_index = self.buffer_index.get();
+                    // Which page we read and which we are going to write back to.
+                    let page_number = self.address.get() / page_size;
+
+                    // Copy what we read from the page buffer to the user buffer.
+                    for i in 0..len {
+                        pagebuffer.as_mut()[page_index + i] = buffer[buffer_index + i];
+                    }
+
+                    // Do the write.
+                    self.buffer.replace(buffer);
+                    self.remaining_length.set(self.remaining_length.get() - len);
+                    self.address.set(self.address.get() + len);
+                    self.buffer_index.set(buffer_index + len);
+                    self.driver.write_page(page_number, pagebuffer);
+                });
+            }
             _ => {}
         }
 
     }
 
-    fn write_complete(&self, buffer: &'static mut F::Page, error: hil::flash::Error) {
+    fn write_complete(&self, pagebuffer: &'static mut F::Page, _error: hil::flash::Error) {
+        // After a write we could be done, need to do another write, or need to
+        // do a read.
+        self.buffer.take().map(move |buffer| {
+            let page_size = pagebuffer.as_mut().len();
+
+            if self.remaining_length.get() == 0 {
+                // Done!
+                self.pagebuffer.replace(pagebuffer);
+                self.state.set(State::Idle);
+                self.client.get().map(move |client| client.write_done(buffer, self.length.get()));
+            } else if self.remaining_length.get() >= page_size {
+                // Write an entire page!
+                let buffer_index = self.buffer_index.get();
+                let page_number = self.address.get() / page_size;
+
+                // Copy data into page buffer.
+                for i in 0..page_size {
+                    pagebuffer.as_mut()[i] = buffer[buffer_index + i];
+                }
+
+                self.buffer.replace(buffer);
+                self.remaining_length.set(self.remaining_length.get() - page_size);
+                self.address.set(self.address.get() + page_size);
+                self.buffer_index.set(buffer_index + page_size);
+                self.driver.write_page(page_number, pagebuffer);
+            } else {
+                // Write a partial page!
+                self.buffer.replace(buffer);
+                self.driver.read_page(self.address.get() / page_size, pagebuffer);
+            }
+        });
 
     }
 
-    fn erase_complete(&self, error: hil::flash::Error) {}
+    fn erase_complete(&self, _error: hil::flash::Error) {}
 }
