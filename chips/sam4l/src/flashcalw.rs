@@ -231,10 +231,10 @@ macro_rules! bit {
 
 impl FLASHCALW {
     const fn new(base_addr: usize,
-                     ahb_clk: pm::HSBClock,
-                     hramc1_clk: pm::HSBClock,
-                     pb_clk: pm::PBBClock)
-                     -> FLASHCALW {
+                 ahb_clk: pm::HSBClock,
+                 hramc1_clk: pm::HSBClock,
+                 pb_clk: pm::PBBClock)
+                 -> FLASHCALW {
         FLASHCALW {
             registers: base_addr as *mut Registers,
             cache: (base_addr + PICOCACHE_OFFSET) as *mut PicocacheRegisters,

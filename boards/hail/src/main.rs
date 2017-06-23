@@ -370,7 +370,8 @@ pub unsafe fn reset_handler() {
     pub static mut PAGEBUFFER: sam4l::flashcalw::Sam4lPage = sam4l::flashcalw::Sam4lPage::new();
     let nv_to_page = static_init!(
         capsules::nonvolatile_to_pages::NonvolatileToPages<'static, sam4l::flashcalw::FLASHCALW>,
-        capsules::nonvolatile_to_pages::NonvolatileToPages::new(&mut sam4l::flashcalw::FLASH_CONTROLLER,
+        capsules::nonvolatile_to_pages::NonvolatileToPages::new(
+            &mut sam4l::flashcalw::FLASH_CONTROLLER,
             &mut PAGEBUFFER));
     hil::flash::Flash::set_client(&sam4l::flashcalw::FLASH_CONTROLLER, nv_to_page);
 

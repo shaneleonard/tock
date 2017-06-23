@@ -17,8 +17,8 @@
 //!               hil::flash::Flash
 //! ```
 
-use core::cmp;
 use core::cell::Cell;
+use core::cmp;
 use kernel::ReturnCode;
 use kernel::common::take_cell::TakeCell;
 use kernel::hil;
@@ -43,9 +43,7 @@ pub struct NonvolatileToPages<'a, F: hil::flash::Flash + 'static> {
 }
 
 impl<'a, F: hil::flash::Flash + 'a> NonvolatileToPages<'a, F> {
-    pub fn new(driver: &'a F,
-               buffer: &'static mut F::Page)
-               -> NonvolatileToPages<'a, F> {
+    pub fn new(driver: &'a F, buffer: &'static mut F::Page) -> NonvolatileToPages<'a, F> {
         NonvolatileToPages {
             driver: driver,
             client: Cell::new(None),
@@ -60,7 +58,9 @@ impl<'a, F: hil::flash::Flash + 'a> NonvolatileToPages<'a, F> {
     }
 }
 
-impl<'a, F: hil::flash::Flash + 'a> hil::nonvolatile_storage::NonvolatileStorage for NonvolatileToPages<'a, F> {
+impl<'a, F: hil::flash::Flash + 'a> hil::nonvolatile_storage::NonvolatileStorage
+    for
+    NonvolatileToPages<'a, F> {
     fn set_client(&self, client: &'static hil::nonvolatile_storage::NonvolatileStorageClient) {
         self.client.set(Some(client));
     }
@@ -151,7 +151,9 @@ impl<'a, F: hil::flash::Flash + 'a> hil::flash::Client<F> for NonvolatileToPages
                         // Nothing more to do. Put things back and issue callback.
                         self.pagebuffer.replace(pagebuffer);
                         self.state.set(State::Idle);
-                        self.client.get().map(move |client| client.read_done(buffer, self.length.get()));
+                        self.client
+                            .get()
+                            .map(move |client| client.read_done(buffer, self.length.get()));
                     } else {
                         // More to do!
                         self.buffer.replace(buffer);
@@ -205,7 +207,9 @@ impl<'a, F: hil::flash::Flash + 'a> hil::flash::Client<F> for NonvolatileToPages
                 // Done!
                 self.pagebuffer.replace(pagebuffer);
                 self.state.set(State::Idle);
-                self.client.get().map(move |client| client.write_done(buffer, self.length.get()));
+                self.client.get().map(move |client| {
+                    client.write_done(buffer, self.length.get())
+                });
             } else if self.remaining_length.get() >= page_size {
                 // Write an entire page!
                 let buffer_index = self.buffer_index.get();
