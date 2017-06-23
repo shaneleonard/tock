@@ -69,17 +69,6 @@ impl<'a> AppFlash<'a> {
                 //     return EINVAL;
                 // }
 
-                // // Check that the address is block aligned.
-                // if flash_address % 512 != 0 {
-                //     return ReturnCode::EINVAL;
-                // }
-
-                let app_buffer_len = app.buffer.as_mut().map_or(0, |app_buffer| app_buffer.len());
-
-                // if app_buffer_len != 512 {
-                //     return ReturnCode::EINVAL;
-                // }
-
                 if self.current_app.get().is_none() {
                     self.current_app.set(Some(appid));
 
@@ -116,9 +105,9 @@ impl<'a> AppFlash<'a> {
 }
 
 impl<'a> hil::nonvolatile_storage::NonvolatileStorageClient for AppFlash<'a> {
-    fn read_done(&self, buffer: &'static mut [u8], length: usize) {}
+    fn read_done(&self, _buffer: &'static mut [u8], _length: usize) {}
 
-    fn write_done(&self, buffer: &'static mut [u8], length: usize) {
+    fn write_done(&self, buffer: &'static mut [u8], _length: usize) {
         // Put our write buffer back.
         self.buffer.replace(buffer);
 

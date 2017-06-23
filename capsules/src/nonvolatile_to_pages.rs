@@ -1,6 +1,13 @@
 //! Map arbitrary nonvolatile reads and writes to page operations.
 //!
-//! ```
+//! This splits non-page-aligned reads and writes into a series of page level
+//! reads and writes. While it is handling a read or write it returns `EBUSY` to
+//! all additional requests.
+//!
+//! This module is designed to be used on top of any flash storage and below any
+//! user of `NonvolatileStorage`. This module handles different sized pages.
+//!
+//! ```plain
 //! hil::nonvolatile_storage::NonvolatileStorage
 //! ┌──────────────────────────────────────────┐
 //! │                                          │
@@ -12,10 +19,9 @@
 
 use core::cmp;
 use core::cell::Cell;
-use kernel::{AppId, AppSlice, Callback, Container, Driver, ReturnCode, Shared};
+use kernel::ReturnCode;
 use kernel::common::take_cell::TakeCell;
 use kernel::hil;
-use kernel::process::Error;
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 enum State {
