@@ -92,6 +92,7 @@ struct Hail {
     ipc: kernel::ipc::IPC,
     crc: &'static capsules::crc::Crc<'static, sam4l::crccu::Crccu<'static>>,
     dac: &'static capsules::dac::Dac<'static>,
+    app_flash: &'static capsules::app_flash_driver::AppFlash<'static, sam4l::flashcalw::FLASHCALW>,
 }
 
 impl Platform for Hail {
@@ -118,6 +119,7 @@ impl Platform for Hail {
             16 => f(Some(self.crc)),
 
             26 => f(Some(self.dac)),
+            27 => f(Some(self.app_flash)),
 
             0xff => f(Some(&self.ipc)),
             _ => f(None),
@@ -364,6 +366,15 @@ pub unsafe fn reset_handler() {
         capsules::dac::Dac<'static>,
         capsules::dac::Dac::new(&mut sam4l::dac::DAC));
 
+    // App Flash
+    pub static mut PAGEBUFFER: sam4l::flashcalw::Sam4lPage = sam4l::flashcalw::Sam4lPage::new();
+    let app_flash = static_init!(
+        capsules::app_flash_driver::AppFlash<'static, sam4l::flashcalw::FLASHCALW>,
+        capsules::app_flash_driver::AppFlash::new(&mut sam4l::flashcalw::FLASH_CONTROLLER,
+            kernel::Container::create(), &mut PAGEBUFFER));
+    hil::flash::Flash::set_client(&sam4l::flashcalw::FLASH_CONTROLLER, app_flash);
+    sam4l::flashcalw::FLASH_CONTROLLER.configure();
+
 
     let hail = Hail {
         console: console,
@@ -381,6 +392,7 @@ pub unsafe fn reset_handler() {
         ipc: kernel::ipc::IPC::new(),
         crc: crc,
         dac: dac,
+        app_flash: app_flash,
     };
 
     // Need to reset the nRF on boot
@@ -399,7 +411,7 @@ pub unsafe fn reset_handler() {
     hail.nrf51822.initialize();
 
     let mut chip = sam4l::chip::Sam4l::new();
-    chip.mpu().enable_mpu();
+    // chip.mpu().enable_mpu();
 
     // Uncomment to measure overheads for TakeCell and MapCell:
     // test_take_map_cell::test_take_map_cell();
