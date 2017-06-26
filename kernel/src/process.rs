@@ -59,6 +59,23 @@ pub fn schedule(callback: FunctionCall, appid: AppId) -> bool {
     }
 }
 
+pub fn get_editable_flash_range(app_idx: usize) -> (usize, usize) {
+    let procs = unsafe { &mut PROCS };
+    if app_idx >= procs.len() {
+        return (0, 0);
+    }
+
+    match procs[app_idx] {
+        None => (0, 0),
+        Some(ref mut p) => {
+            // TODO(alevy): validate appid liveness
+            let start = p.flash_non_header_start() as usize;
+            let end = p.flash_end() as usize;
+            (start, end)
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
     NoSuchApp,
@@ -207,6 +224,9 @@ pub struct Process<'a> {
 
     /// Process text segment
     text: &'static [u8],
+    /// Number of bytes the TBF header takes up at the beginning of the app
+    /// text segment.
+    tbf_header_length: usize,
 
     stored_regs: StoredRegs,
 
@@ -328,6 +348,10 @@ impl<'a> Process<'a> {
 
     pub fn flash_start(&self) -> *const u8 {
         self.text.as_ptr()
+    }
+
+    pub fn flash_non_header_start(&self) -> *const u8 {
+        ((self.text.as_ptr() as usize) + self.tbf_header_length) as *const u8
     }
 
     pub fn flash_end(&self) -> *const u8 {
@@ -502,6 +526,7 @@ impl<'a> Process<'a> {
                     last_syscall: Cell::new(None),
 
                     text: slice::from_raw_parts(app_flash_address, app_flash_size),
+                    tbf_header_length: load_info.rel_data_offset as usize,
 
                     stored_regs: Default::default(),
                     yield_pc: load_result.init_fn,
