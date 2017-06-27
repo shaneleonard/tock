@@ -379,9 +379,11 @@ pub unsafe fn reset_handler() {
 	// Signbus IO Interface
 	let signbus_io_interface = static_init!(
 		capsules::signbus_io_interface::SignbusIOInterface<'static>,
-		capsules::signbus_io_interface::SignbusIOInterface::new(port_signpost_tock));
+		capsules::signbus_io_interface::SignbusIOInterface::new(port_signpost_tock,
+			&mut capsules::signbus_io_interface::BUFFER0,
+			&mut capsules::signbus_io_interface::BUFFER1
+		));
 
-	signbus_io_interface.signbus_io_init(0x28);
 
 
 /* 
@@ -434,6 +436,8 @@ pub unsafe fn reset_handler() {
 
     // Uncomment to measure overheads for TakeCell and MapCell:
     // test_take_map_cell::test_take_map_cell();
+	
+	signbus_io_interface.signbus_io_init(0x28);
 
     // debug!("Initialization complete. Entering main loop");
     kernel::main(&hail, &mut chip, load_processes(), &hail.ipc);
