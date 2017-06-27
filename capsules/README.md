@@ -90,6 +90,8 @@ simultaneously) support for generic sensor interfaces.
 - **[Asynchronous GPIO](src/gpio_async.rs)**: GPIO pins accessed by split-phase
   calls.
 - **[9DOF](src/ninedof.rs)**: 9DOF sensors (acceleration, magnetometer, gyroscope).
+- **[Nonvolatile Storage](src/nonvolatile_storage.rs)**: Persistent storage for
+  userspace.
 
 
 ### Virtualized Hardware Resources
@@ -99,3 +101,11 @@ These allow for multiple users of shared hardware resources in the kernel.
 - **[Virtual Alarm](src/virtual_alarm.rs)**: Shared alarm resource.
 - **[Virtual I2C](src/virtual_i2c.rs)**: Shared I2C and fixed addresses.
 - **[Virtual SPI](src/virtual_spi.rs)**: Shared SPI and fixed chip select pins.
+
+
+### Utilty Capsules
+
+Other capsules that implement reusable logic.
+
+- **[Nonvolatile to Pages](src/nonvolatile_to_pages.rs)**: Map arbitrary reads
+  and writes to flash pages.
