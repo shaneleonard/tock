@@ -113,7 +113,7 @@ impl<'a, U: UARTAdvanced> Driver for Nrf51822Serialization<'a, U> {
                 // Start the receive now that we have a callback.
                 self.rx_buffer
                     .take()
-                    .map(|buffer| self.uart.receive_automatic(buffer, 250));
+                    .map(|buffer| self.uart.receive_automatic(buffer, 255));
 
                 ReturnCode::SUCCESS
             }
@@ -140,21 +140,6 @@ impl<'a, U: UARTAdvanced> Driver for Nrf51822Serialization<'a, U> {
                             }
                             self.uart.transmit(buffer, write_len);
                         });
-                    });
-                });
-                ReturnCode::SUCCESS
-            }
-
-            // Ask the kernel to callback the application. This is used to
-            // keep the state machine in the Nordic BLE serialization library
-            // happy so that events look like they are occuring as the library
-            // expects, since it doesn't expect there to be an underlying
-            // kernel.
-            9001 => {
-                self.app.map(|appst| {
-                    appst.callback.as_mut().map(|mut cb| {
-                        // schedule an event just to wake up from yield
-                        cb.schedule(17, 0, 0);
                     });
                 });
                 ReturnCode::SUCCESS
@@ -196,9 +181,12 @@ impl<'a, U: UARTAdvanced> Client for Nrf51822Serialization<'a, U> {
                 self.rx_buffer.map(|buffer| for idx in 0..max_len {
                     rb.as_mut()[idx] = buffer[idx];
                 });
-
-                appst.callback.as_mut().map(|cb| {
+                // debug!("g");
+                appst.callback.as_mut().map_or_else(|| {
+                    debug!("no");
+                }, |cb| {
                     // send the whole darn buffer to the serialization layer
+                    // debug!("p");
                     cb.schedule(4, rx_len, 0);
                 });
 
@@ -207,6 +195,11 @@ impl<'a, U: UARTAdvanced> Client for Nrf51822Serialization<'a, U> {
         });
 
         // restart the uart receive
-        self.rx_buffer.take().map(|buffer| self.uart.receive_automatic(buffer, 250));
+        self.rx_buffer.take().map_or_else(|| {
+            debug!("lost");
+        }, |buffer|{
+            // debug!("ra");
+         self.uart.receive_automatic(buffer, 255)
+    });
     }
 }

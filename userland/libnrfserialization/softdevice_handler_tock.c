@@ -101,7 +101,7 @@ static sys_evt_handler_t              m_sys_evt_handler;                /**< App
  */
 void softdevice_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
 {
-    printf("gu\n");
+    // printf("gu\n");
     app_error_fault_handler(id, pc, info);
 }
 
@@ -165,6 +165,7 @@ void intern_softdevice_events_execute(void)
         // Fetch BLE Events.
         if (!no_more_ble_evts)
         {
+            // printf("ble evnt\n");
             // Pull event from stack
             uint16_t evt_len = m_ble_evt_buffer_size;
 
@@ -180,7 +181,9 @@ void intern_softdevice_events_execute(void)
             else
             {
                 // Call application's BLE stack event handler.
+                // printf("u0\n");
                 m_ble_evt_handler((ble_evt_t *)mp_ble_evt_buffer);
+                // printf("u1\n");
             }
         }
 #endif
@@ -347,11 +350,13 @@ void SOFTDEVICE_EVT_IRQHandler(void)
 {
     if (m_evt_schedule_func != NULL)
     {
+        // printf("yay1\n");
         uint32_t err_code = m_evt_schedule_func();
         APP_ERROR_CHECK(err_code);
     }
     else
     {
+        // printf("yay2\n");
         intern_softdevice_events_execute();
     }
 }

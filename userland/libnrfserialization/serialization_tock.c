@@ -14,13 +14,22 @@
 #include "app_timer.h"
 
 #include "nrf51_serialization.h"
+#include "ble_serialization.h"
+
+#define RX_BUFFER_SIZE 5
+static uint8_t rx_event_buffers[RX_BUFFER_SIZE][SER_HAL_TRANSPORT_RX_MAX_PKT_SIZE];
+static uint8_t _head_event = 0;
+static uint8_t _tail_event = 0;
+
+static uint8_t rx_rsp_buffer[SER_HAL_TRANSPORT_RX_MAX_PKT_SIZE];
+static bool _have_rsp_packet = false;
 
 // Buffer to receive packets from the nrf51 in.
 // The upper layer also has a buffer, which we could use, but to make
 // the timing work out better we just keep a buffer around that the kernel
 // can keep a pointer to.
 static uint8_t rx[SER_HAL_TRANSPORT_RX_MAX_PKT_SIZE];
-// This is a pointer to the RX buffer passed in by the upper seralization
+// This is a pointer to the RX buffer passed in by the upper serialization
 // layer.
 static uint8_t* hal_rx_buf = NULL;
 
@@ -39,7 +48,17 @@ static ser_phy_evt_t _ser_phy_tx_event;
 static bool _receiving_packet = false;
 // Keep track of how much data the kernel got between receiving the buffer
 // and passing it to the serialization layer.
-static int saved_rx_len = 0;
+// static int saved_rx_len = 0;
+// Need to call back into the nordic library after getting a buffer.
+static bool _need_wakeup = false;
+// Where in the rx buffer which could have multiple packets we are currently
+// looking.
+// static uint8_t _rx_offset = 0;
+// Whether there are multiple packets in a single UART receive callback that
+// need to be processed.
+static bool _queued_packets = false;
+
+static alarm_t* _timeout_timer = NULL;
 
 
 /*******************************************************************************
@@ -48,9 +67,21 @@ static int saved_rx_len = 0;
 
 static bool nrf_serialization_done = false;
 
+void timeout_timer_cb (int a, int b, int c, void* ud) {
+    gpio_toggle(1);
+    // Uh oh did not get a response to a command packet.
+    // Send up an error.
+    _ser_phy_rx_event.evt_type = SER_PHY_EVT_HW_ERROR;
+    if (_ser_phy_event_handler) {
+        _ser_phy_event_handler(_ser_phy_rx_event);
+    }
+}
+
 void ble_serialization_callback (int callback_type, int rx_len, int c, void* other) {
     UNUSED_PARAMETER(c);
     UNUSED_PARAMETER(other);
+
+    // printf("cb%i\n", callback_type);
 
     nrf_serialization_done = true;
 
@@ -70,22 +101,100 @@ void ble_serialization_callback (int callback_type, int rx_len, int c, void* oth
     } else if (callback_type == 4) {
         // RX entire buffer
 
-        // Make sure we received at 3 bytes (two length and then at least
-        // some payload). If not, this packet is not worth looking at.
-        if (rx_len < 3) {
-            return;
+
+        // // Make sure we received at 3 bytes (two length and then at least
+        // // some payload). If not, this packet is not worth looking at.
+        // if (rx_len < 3) {
+        //     return;
+        // }
+
+        // if (_rx_offset == 0) {
+        //     // ok this is a new buffer make a copy and use that
+        //     memcpy(rx_copy, rx, SER_HAL_TRANSPORT_RX_MAX_PKT_SIZE);
+        // }
+
+
+        // Copy all received packets into our circular buffer
+        int offset = 0;
+        while (1 && (rx_len - offset >= SER_PHY_HEADER_SIZE)) {
+            uint16_t pktlen = (rx[offset] | rx[offset+1] << 8) + SER_PHY_HEADER_SIZE;
+            // Make sure that pktlen is reasonable
+            if (pktlen > SER_HAL_TRANSPORT_RX_MAX_PKT_SIZE ||
+                pktlen+offset > SER_HAL_TRANSPORT_RX_MAX_PKT_SIZE ||
+                pktlen > rx_len - offset) {
+                // Too big to copy, something went wrong.
+                printf("dropping %i %i %i \n", pktlen, offset, rx_len);
+                break;
+            }
+
+            // Check which type of packet this is.
+            uint8_t packet_type = rx[offset+2];
+            // printf("ptype %i\n", packet_type);
+
+            switch (packet_type) {
+                case SER_PKT_TYPE_RESP:
+                case SER_PKT_TYPE_DTM_RESP:
+                    if (_have_rsp_packet) {
+                        printf("Already have response packet?\n");
+                    } else {
+                        _have_rsp_packet = true;
+                        memcpy(rx_rsp_buffer, rx+offset, pktlen);
+
+
+                        // Got a response, cancel any pending timer
+                        if (_timeout_timer != NULL) {
+                            alarm_cancel(_timeout_timer);
+                        }
+                    }
+                    break;
+
+                case SER_PKT_TYPE_EVT:
+                    // Check if there is room
+                    if ((_tail_event + 1) % RX_BUFFER_SIZE == _head_event) {
+                        // No empty slots in the queue
+                        break;
+                    }
+                    // Copy into open slot and increment the pointer.
+            // printf("pcmd 0x%x %i\n", rx[offset+3], _tail_event);
+                    memcpy(rx_event_buffers[_tail_event], rx+offset, pktlen);
+                    _tail_event = (_tail_event + 1) % RX_BUFFER_SIZE;
+
+                    break;
+                default:
+                    printf("other packet? %i\n", packet_type);
+                    break;
+            }
+
+
+
+            // Check for another packet.
+            offset += pktlen;
+            // printf("o %i %i %i\n", offset, pktlen, rx_len);
+            if (rx_len <= offset) {
+                break;
+            }
         }
 
-        // Only pass this buffer up if we don't have any others in flight.
-        // Ideally this would be a queue at some point.
+        // Only pass this buffer up if we don't have any others in flight. We
+        // can only ask for one buffer from serialization at a time.
         if (!_receiving_packet) {
+            uint16_t buf_len = 0;
 
-            // Make sure the packet is not too big. If it is, the upper layer
-            // is going to reject it, so lets just skip that and drop it now.
-            uint16_t buf_len = (rx[0] | rx[1] << 8) - SER_PHY_HEADER_SIZE;
-            if (buf_len < SER_HAL_TRANSPORT_RX_MAX_PKT_SIZE) {
-                saved_rx_len = rx_len;
+            // Make sure we have a packet in the queue to send to the serialization
+            // library.
+            if (_have_rsp_packet) {
+                buf_len = (rx_rsp_buffer[0] | rx_rsp_buffer[1] << 8);
+                // buf_len = (rx_rsp_buffer[0] | rx_rsp_buffer[1] << 8) - SER_PHY_HEADER_SIZE;
+            } else if (!ser_sd_transport_is_busy() && _head_event != _tail_event) {
+                // DO NOT PROCESS EVENTS IF THERE IS A CMD/RSP STILL OUTSTANDING.
+                // Processing an events can generate a new command and things
+                // break. We use ser_sd_transport_is_busy() to do this check
+                // because it is essentially contingent on there being an
+                // outstanding response for a request.
+                buf_len = (rx_event_buffers[_head_event][0] | rx_event_buffers[_head_event][1] << 8);
+            }
 
+            if (buf_len > 0) {
                 // Need a dummy request for a buffer to keep the state machines
                 // in the serialization library happy. We do use this buffer, but
                 // we don't block packet receive until we get it.
@@ -94,8 +203,8 @@ void ble_serialization_callback (int callback_type, int rx_len, int c, void* oth
 
                 if (_ser_phy_event_handler) {
                     // Need to mark things as busy on this end. The serialization state
-                    // machine does not like it if you do things out of order, so
-                    // just enforce some sanity on our end.
+                    // machine does not like it if you do things out of order, so just
+                    // enforce some sanity on our end.
                     _receiving_packet = true;
                     _ser_phy_event_handler(_ser_phy_rx_event);
                 }
@@ -103,25 +212,45 @@ void ble_serialization_callback (int callback_type, int rx_len, int c, void* oth
         }
 
     } else if (callback_type == 17) {
-        // Great, we're awake.
+        // Great, we have a serialization approved buffer to use.
 
         // Check that we actually have a buffer to pass to the upper layers.
         // This buffer MUST be the same buffer that it passed us.
         if (hal_rx_buf) {
 
-            uint16_t first_pkt_len = rx[0] | (((uint16_t) rx[1]) << 8);
-            if (first_pkt_len > saved_rx_len - SER_PHY_HEADER_SIZE) {
-                first_pkt_len = saved_rx_len - SER_PHY_HEADER_SIZE;
-            }
+            // uint16_t first_pkt_len = rx[_rx_offset] | (((uint16_t) rx[_rx_offset+1]) << 8);
+            // if (first_pkt_len > saved_rx_len - SER_PHY_HEADER_SIZE) {
+            //     first_pkt_len = saved_rx_len - SER_PHY_HEADER_SIZE;
+            // }
 
-            // Copy our buffer into the upper layer's buffer.
-            memcpy(hal_rx_buf, rx+2, first_pkt_len);
+            // uint16_t buf_len = (rx_event_buffers[_head][0] | rx_event_buffers[_head][1] << 8) - SER_PHY_HEADER_SIZE;
+            uint16_t first_pkt_len = 0;
+
+
+            if (_have_rsp_packet) {
+                _have_rsp_packet = false;
+                first_pkt_len = (rx_rsp_buffer[0] | rx_rsp_buffer[1] << 8);
+                memcpy(hal_rx_buf, rx_rsp_buffer+SER_PHY_HEADER_SIZE, first_pkt_len);
+
+            } else {
+                first_pkt_len = rx_event_buffers[_head_event][0] | (((uint16_t) rx_event_buffers[_head_event][1]) << 8);
+                memcpy(hal_rx_buf, rx_event_buffers[_head_event]+SER_PHY_HEADER_SIZE, first_pkt_len);
+                // printf("u 0x%x %i %i\n", hal_rx_buf[1], first_pkt_len, _head_event);
+
+                // Remove this packet from our queue.
+                _head_event = (_head_event + 1) % RX_BUFFER_SIZE;
+            }
 
             _ser_phy_rx_event.evt_type = SER_PHY_EVT_RX_PKT_RECEIVED;
             _ser_phy_rx_event.evt_params.rx_pkt_received.num_of_bytes = first_pkt_len;
             _ser_phy_rx_event.evt_params.rx_pkt_received.p_buffer = hal_rx_buf;
 
             hal_rx_buf = NULL;
+
+            // Check if there are more packets in the queue.
+            if (_head_event != _tail_event || _have_rsp_packet) {
+                _queued_packets = true;
+            }
 
             if (_ser_phy_event_handler) {
                 _receiving_packet = false;
@@ -138,6 +267,29 @@ void ble_serialization_callback (int callback_type, int rx_len, int c, void* oth
             }
         }
     }
+
+
+    // When we get here, we _may_ end up in a wait() state. Wait is good because
+    // it lets us check if we have any outstanding things to do and if so run
+    // them instead of calling yield. However, depending on where the nRF
+    // state machine is at, wait may not get called. We can check this by seeing
+    // if the nordic state machine thinks its busy.
+    if (!ser_sd_transport_is_busy()) {
+        gpio_toggle(0);
+        if (_need_wakeup) {
+            // printf("wkup\n");
+            _need_wakeup = false;
+            ble_serialization_callback(17, 0, 0, NULL);
+        } else if (_queued_packets) {
+            gpio_toggle(0);
+            // printf("yay more\n");
+            _queued_packets = false;
+            ble_serialization_callback(4, 0, 0, NULL);
+        }
+    } else {
+        gpio_toggle(2);
+    }
+    // printf("e\n");
 }
 
 
@@ -171,7 +323,9 @@ void ser_app_hal_nrf_evt_irq_priority_set () {
 void ser_app_hal_nrf_evt_pending() {
     // Not sure if we can do software interrupts, so try just doing a
     // function call.
+    // printf("t0\n");
     TOCK_EVT_IRQHandler();
+    // printf("t1\n");
 }
 
 
@@ -200,6 +354,7 @@ uint32_t ser_phy_open (ser_phy_events_handler_t events_handler) {
 }
 
 uint32_t ser_phy_tx_pkt_send (const uint8_t* p_buffer, uint16_t num_of_bytes) {
+    // printf("tx\n");
     // Error checks
     if (p_buffer == NULL) {
         return NRF_ERROR_NULL;
@@ -209,6 +364,11 @@ uint32_t ser_phy_tx_pkt_send (const uint8_t* p_buffer, uint16_t num_of_bytes) {
 
     // Check if there is no ongoing transmission at the moment
     if (tx_len == 0) {
+        // We need to set a timer in case we never get this packet.
+        if (ser_sd_transport_is_busy()) {
+            _timeout_timer = timer_in(100, timeout_timer_cb, NULL);
+        }
+
         // Encode the number of bytes as the first two bytes of the outgoing
         // packet.
         tx[0] = num_of_bytes & 0xFF;
@@ -231,10 +391,11 @@ uint32_t ser_phy_tx_pkt_send (const uint8_t* p_buffer, uint16_t num_of_bytes) {
 
 
 uint32_t ser_phy_rx_buf_set (uint8_t* p_buffer) {
+    // printf("bufset\n");
     // Save a pointer to the buffer we can use.
     hal_rx_buf = p_buffer;
 
-    nrf51_wakeup();
+    _need_wakeup = true;
 
     return NRF_SUCCESS;
 }
@@ -251,9 +412,22 @@ void ser_phy_interrupts_disable () { }
 
 // Essentially sleep this process
 uint32_t sd_app_evt_wait () {
-  nrf_serialization_done = false;
-  yield_for(&nrf_serialization_done);
-  return NRF_SUCCESS;
+    // printf("wait head:%i tail%i qp:%i\n", _head_event, _tail_event, _queued_packets);
+    if (_need_wakeup == true) {
+        // We needed to let the nordic library get to its wait function, but
+        // we already have a buffer ready to pass to it. Rather than calling
+        // through the kernel, just call the function here.
+        _need_wakeup = false;
+        ble_serialization_callback(17, 0, 0, NULL);
+    } else if (_queued_packets) {
+        _queued_packets = false;
+        ble_serialization_callback(4, 0, 0, NULL);
+    } else {
+        // printf("y\n");
+        nrf_serialization_done = false;
+        yield_for(&nrf_serialization_done);
+    }
+    return NRF_SUCCESS;
 }
 
 

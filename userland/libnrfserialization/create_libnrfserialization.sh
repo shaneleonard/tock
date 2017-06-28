@@ -2,7 +2,7 @@
 
 set -e
 
-make clean
+#make clean
 
 # Commit hash of the https://github.com/lab11/nrf5x-base repository
 # to use to make the library.
