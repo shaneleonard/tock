@@ -37,10 +37,10 @@ enum State {
 pub struct PortSignpostTock<'a> {
 	i2c: 		&'a hil::i2c::I2CMasterSlave,
 	
-	master_tx_buffer:		TakeCell <'static, [u8]>,
-	master_rx_buffer:		TakeCell <'static, [u8]>,
-	slave_tx_buffer:		TakeCell <'static, [u8]>,
-	slave_rx_buffer:		TakeCell <'static, [u8]>,
+	pub master_tx_buffer:		TakeCell <'static, [u8]>,
+	pub master_rx_buffer:		TakeCell <'static, [u8]>,
+	pub slave_tx_buffer:		TakeCell <'static, [u8]>,
+	pub slave_rx_buffer:		TakeCell <'static, [u8]>,
 
 	state:		Cell<State>,
 }
@@ -84,7 +84,7 @@ impl<'a> PortSignpostTock<'a> {
 		return r;
 	}
 
-	pub fn i2c_master_write(&self, address: u8, len: u32) -> ReturnCode {
+	pub fn i2c_master_write(&self, address: u8, len: u16) -> ReturnCode {
 	
 		self.master_tx_buffer.take().map(|buffer|{
 		

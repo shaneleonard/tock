@@ -40,6 +40,8 @@ pub mod gpio_async;
 pub mod max17205;
 pub mod port_signpost_tock;
 pub mod signbus_io_interface;
+pub mod signbus_protocol_layer;
+pub mod signbus_app_layer;
 pub mod pca9544a;
 pub mod nonvolatile_to_pages;
 pub mod nonvolatile_storage_driver;

@@ -438,6 +438,8 @@ pub unsafe fn reset_handler() {
     // test_take_map_cell::test_take_map_cell();
 	
 	signbus_io_interface.signbus_io_init(0x28);
+	
+
 
     // debug!("Initialization complete. Entering main loop");
     kernel::main(&hail, &mut chip, load_processes(), &hail.ipc);
