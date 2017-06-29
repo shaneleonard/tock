@@ -49,26 +49,42 @@ extern "C" {
 
 #define DRIVER_NUM_APP_FLASH 30
 
-// Provide a pointer to the start of the region of the app's flash that it
-// wishes to access and a buffer in memory that will act as temporary storage
-// for the data actually stored in flash. This buffer will be populated with the
-// contents of flash when a read() is called, and will be written to flash when
-// write() is called. This buffer must be in RAM and must not point directly to
-// the flash address space.
-int app_flash_configure(void* flash, void* buffer, uint32_t length);
 
-// Set a callback function for when the flash has been written to.
-int app_flash_set_callback(subscribe_cb callback, void* callback_args);
+// Declare an application state structure
+//
+// This macro does a little extra bookkeeping, however it should look
+// much like a simple declaration in practice:
+//
+//     APP_STATE_DECLARE(struct my_state_t, memory_copy);
+//
+// Which you can read as the equivalent of:
+//
+//     struct my_state_t memory_copy;
+//
+// The variable `memory_copy` is available as regular C structure, however
+// users must explicitly `load` and `save` application state as appropriate
+#define APP_STATE_DECLARE(_type, _identifier)                         \
+  __attribute__((section(".app_state")))                              \
+  _type _app_state_flash;                                             \
+  _type _identifier;                                                  \
+  void* _app_state_flash_pointer = &_app_state_flash;                 \
+  void* _app_state_ram_pointer = &_identifier;                        \
+  size_t _app_state_size = sizeof(_type);
 
-// Populate the provided buffer (in the configure call) with the data stored
-// in flash at the address also provided to configure(). The entire buffer will
-// be populated.
-int app_flash_read_sync(void);
+extern void* _app_state_flash_pointer;
+extern void* _app_state_ram_pointer;
+extern size_t _app_state_size;
 
-// Write the contents of the buffer in RAM to flash at the address specified
-// in the configure() call.
-int app_flash_write(void);
-int app_flash_write_sync(void);
+// Load application state from persistent storage
+__attribute__ ((warn_unused_result))
+int app_state_load_sync(void);
+
+// Save application state to persistent storage
+__attribute__ ((warn_unused_result))
+int app_state_save(subscribe_cb callback, void* callback_args);
+__attribute__ ((warn_unused_result))
+int app_state_save_sync(void);
+
 
 #ifdef __cplusplus
 }
