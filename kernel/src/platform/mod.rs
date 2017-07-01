@@ -18,4 +18,5 @@ pub trait Chip {
     fn mpu(&self) -> &Self::MPU;
     fn systick(&self) -> &Self::SysTick;
     fn prepare_for_sleep(&self) {}
+    fn wake_up(&self) {}
 }

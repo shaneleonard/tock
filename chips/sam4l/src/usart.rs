@@ -6,6 +6,7 @@ use core::cell::Cell;
 use core::cmp;
 use core::mem;
 use dma;
+use gpio;
 use kernel::ReturnCode;
 use kernel::common::VolatileCell;
 // other modules
@@ -356,12 +357,28 @@ impl USART {
 
     fn enable_clock(&self) {
         unsafe {
+            if ((self as *const USART) as usize)  == ((&USART0 as *const USART) as usize) {
+                //gpio::PB[15].enable();
+                //gpio::PB[15].enable_output();
+                //gpio::PB[15].set();
+            }
+            if ((self as *const USART) as usize)  == ((&USART1 as *const USART) as usize) {
+                gpio::PB[14].enable();
+                gpio::PB[14].enable_output();
+                gpio::PB[14].set();
+            }
             pm::enable_clock(self.clock);
         }
     }
 
     fn disable_clock(&self) {
         unsafe {
+            if ((self as *const USART) as usize) == ((&USART0 as *const USART) as usize) {
+                //gpio::PB[15].clear();
+            }
+            if ((self as *const USART) as usize) == ((&USART1 as *const USART) as usize) {
+                gpio::PB[14].clear();
+            }
             pm::disable_clock(self.clock);
         }
     }

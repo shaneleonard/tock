@@ -157,14 +157,38 @@ impl Chip for Sam4l {
     }
 
     fn prepare_for_sleep(&self) {
+        unsafe {
+            gpio::PB[15].enable();
+            gpio::PB[15].enable_output();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+        }
         if pm::deep_sleep_ready() {
             unsafe {
+                gpio::PB[15].set();
                 cortexm4::scb::set_sleepdeep();
             }
         } else {
             unsafe {
+                gpio::PB[15].clear();
                 cortexm4::scb::unset_sleepdeep();
             }
+        }
+    }
+
+    fn wake_up(&self) {
+        unsafe{
+            gpio::PB[15].enable();
+            gpio::PB[15].enable_output();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
+            gpio::PB[15].toggle();
         }
     }
 }
