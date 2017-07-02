@@ -20,13 +20,8 @@ pub static mut BUFFER2: [u8; 256] = [1; 256];
 
 static debug: u8 = 1;
 const I2C_MAX_LEN: u16 = 255; 
-const SIZE_FLAGS: u16 = 1;
-const SIZE_HEADER: u16 = 8;
-
-
 
 #[repr(C, packed)]
-#[derive(Clone, Copy, Debug)]
 pub struct SignbusNetworkFlags {
 	is_fragment:	bool,
 	is_encrypted:	bool,
@@ -36,7 +31,6 @@ pub struct SignbusNetworkFlags {
 }
 
 #[repr(C, packed)]
-#[derive(Clone, Copy, Debug)]
 pub struct SignbusNetworkHeader {
 	flags:				SignbusNetworkFlags,
 	src:				u8,
@@ -47,7 +41,6 @@ pub struct SignbusNetworkHeader {
 
 
 #[repr(C, packed)]
-//#[derive(Clone, Copy, Debug)]
 pub struct Packet {
 	header: SignbusNetworkHeader,
 	data:	&'static mut [u8],	
@@ -197,16 +190,12 @@ impl<'a> SignbusIOInterface<'a> {
 			// SEND I2C message and update bytes left to send
 			if morePackets == true {
 				let rc = self.port_signpost_tock.i2c_master_write(dest, I2C_MAX_LEN);	
-				
 				if rc != ReturnCode::SUCCESS { return rc; } 
-
 				toSend -= MAX_DATA_LEN;
 			}
 			else {
 				let rc = self.port_signpost_tock.i2c_master_write(dest, toSend);	
-				
 				if rc != ReturnCode::SUCCESS { return rc; } 
-
 				toSend = 0;
 			}
 		}
