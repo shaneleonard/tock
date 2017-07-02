@@ -64,11 +64,9 @@ impl<'a> PortSignpostTock<'a> {
 	fn set_slave_address(&self, i2c_address: u8) -> ReturnCode {
 
 		if i2c_address > 0x7f {
-			debug!("should not be here");
 			return ReturnCode::EINVAL;
 		}
 		hil::i2c::I2CSlave::set_address(self.i2c, i2c_address);
-		debug!("Should be here1");
 
 		return ReturnCode::SUCCESS;
 	}
@@ -78,16 +76,14 @@ impl<'a> PortSignpostTock<'a> {
 		let r = self.set_slave_address(i2c_address);
 		if r == ReturnCode::SUCCESS {
 			self.state.set(State::Init);
-			debug!("Should be here2");
 		}
 
 		return r;
 	}
 
 	pub fn i2c_master_write(&self, address: u8, len: u16) -> ReturnCode {
-	
-		self.master_tx_buffer.take().map(|buffer|{
 		
+		self.master_tx_buffer.map(|buffer|{
 			hil::i2c::I2CMaster::enable(self.i2c);
 			hil::i2c::I2CMaster::write(self.i2c, address, buffer, len as u8);
 		});

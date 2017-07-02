@@ -4,19 +4,21 @@
 
 
 use core::mem;
+use core::slice;
 use core::cell::Cell;
-use core::cmp;
-use kernel::{AppId, AppSlice, Callback, Driver, ReturnCode, Shared};
+//use core::cmp;
+use kernel::{ReturnCode};
 use kernel::common::take_cell::{MapCell, TakeCell};
-use kernel::hil;
-use kernel::hil::gpio;
-use kernel::hil::time;
+//use kernel::hil;
+//use kernel::hil::gpio;
+//use kernel::hil::time;
 use port_signpost_tock;
 
 pub static mut BUFFER0: [u8; 256] = [0; 256];
 pub static mut BUFFER1: [u8; 256] = [0; 256];
+pub static mut BUFFER2: [u8; 256] = [1; 256];
 
-//static EXAMPLE: usize = mem::size_of::<SignbusNetworkFlags>();
+static debug: u8 = 1;
 const I2C_MAX_LEN: u16 = 255; 
 const SIZE_FLAGS: u16 = 1;
 const SIZE_HEADER: u16 = 8;
@@ -24,6 +26,7 @@ const SIZE_HEADER: u16 = 8;
 
 
 #[repr(C, packed)]
+#[derive(Clone, Copy, Debug)]
 pub struct SignbusNetworkFlags {
 	is_fragment:	bool,
 	is_encrypted:	bool,
@@ -33,6 +36,7 @@ pub struct SignbusNetworkFlags {
 }
 
 #[repr(C, packed)]
+#[derive(Clone, Copy, Debug)]
 pub struct SignbusNetworkHeader {
 	flags:				SignbusNetworkFlags,
 	src:				u8,
@@ -43,17 +47,15 @@ pub struct SignbusNetworkHeader {
 
 
 #[repr(C, packed)]
+//#[derive(Clone, Copy, Debug)]
 pub struct Packet {
 	header: SignbusNetworkHeader,
 	data:	&'static mut [u8],	
 }
 
-
-fn serialize<T: Sized>(p: &T) -> &[u8] {
-    	::core::slice::from_raw_parts((p as *const T) as *const u8, 
-										::core::mem::size_of::<T>())
+unsafe fn as_byte_slice<'a, T>(input: &'a T) -> &'a [u8] {
+    slice::from_raw_parts(input as *const T as *const u8, mem::size_of::<T>())
 }
-
 
 pub struct SignbusIOInterface<'a> {
 	port_signpost_tock: 	&'a port_signpost_tock::PortSignpostTock<'a>,
@@ -89,10 +91,12 @@ impl<'a> SignbusIOInterface<'a> {
 		
 		self.this_device_address.set(address);
 		self.port_signpost_tock.init(address);
-			
-		debug!("Address: {}", self.this_device_address.get());
-		debug!("SignbusNetworkHeader: {}", mem::size_of::<SignbusNetworkHeader>());
-		debug!("SignbusNetworkFlags: {}", mem::size_of::<SignbusNetworkFlags>());
+		
+		if debug == 1 {	
+			//debug!("Address: {}", self.this_device_address.get());
+			//debug!("SignbusNetworkHeader: {}", mem::size_of::<SignbusNetworkHeader>());
+			//debug!("SignbusNetworkFlags: {}", mem::size_of::<SignbusNetworkFlags>());
+		}
 
 		return ReturnCode::SUCCESS;
 	}
@@ -105,22 +109,22 @@ impl<'a> SignbusIOInterface<'a> {
 							data: &'static mut [u8],
 							len: u16) -> ReturnCode {
 
-		let mut toSend = len;
+		// update sequence number
+		self.sequence_number.set(self.sequence_number.get() + 1);
 		
-		// calculate max data length
-		let MAX_DATA_LEN: u16 = I2C_MAX_LEN - (mem::size_of::<SignbusNetworkHeader>()as u16);
-	
-
-		// calculate the number of packets we will have to send
+		// number of bytes left to be sent
+		let mut toSend: u16 = len;
+		// size of header (sent everytime)
+		let mut HEADER_SIZE: u16 = mem::size_of::<SignbusNetworkHeader>() as u16;
+		// max data in one packet
+		let MAX_DATA_LEN: u16 = I2C_MAX_LEN - HEADER_SIZE;
+		// number of packets to be sent
 		let mut numPackets: u16 = len/MAX_DATA_LEN + 1;		
 		if len % MAX_DATA_LEN == 0 {
 			numPackets = numPackets - 1; 
 		}
-		
-		// update sequence number
-		self.sequence_number.set(self.sequence_number.get() + 1);
-
-		// Network flags
+	
+		// Network Flags
 		let flags: SignbusNetworkFlags = SignbusNetworkFlags {
 			is_fragment:	false, // toSend > MAX_DATA_LEN
 			is_encrypted:	encrypted,
@@ -129,13 +133,13 @@ impl<'a> SignbusIOInterface<'a> {
 			version:		0x1,
 		};
 
-		// Network header
+		// Network Header
 		let header: SignbusNetworkHeader = SignbusNetworkHeader {
 			flags:				flags,
 			src:				self.this_device_address.get(),
 			sequence_number:	self.htons(self.sequence_number.get() as u16),
-			length:				self.htons(numPackets * mem::size_of::<SignbusNetworkHeader>() as u16 + len),
-			fragment_offset:	(len-toSend) as u16,
+			length:				self.htons(numPackets * (HEADER_SIZE + len)),
+			fragment_offset:	0 as u16,
 		};
 
 		// Packet
@@ -143,29 +147,54 @@ impl<'a> SignbusIOInterface<'a> {
 			header: header,
 			data:	data,	
 		};
-
-
+		
+		if debug == 1 {
+			//debug!("{:?}", data.len());
+			//debug!("{:?}", packet.data.len());
+			//debug!("data length: {} ", packet.data.len());
+			//debug!("toSend: {} ", toSend);
+			//debug!("MAX_DATA_LEN: {} ", MAX_DATA_LEN);
+			//debug!("HEADER_SIZE: {} ", HEADER_SIZE);
+			//debug!("numPackets: {} ", numPackets);
+		}
+		
+		
 		while toSend > 0 {
 			let morePackets: bool = toSend > MAX_DATA_LEN;;
-			let offset: u16 = len - toSend;
+			let mut START: usize = (HEADER_SIZE + 1) as usize; 
 
+			// UPDATE HEADER
 			packet.header.flags.is_fragment = morePackets;
-		
-			packet.header.fragment_offset = self.htons(offset);
+			packet.header.fragment_offset = self.htons(len-toSend);
 
+			// COPY HEADER
+			self.port_signpost_tock.master_tx_buffer.map(|port_buffer|{
+				let d = &mut port_buffer.as_mut()[0..HEADER_SIZE as usize];
+				let bytes: &[u8]= unsafe { as_byte_slice(&packet.header) };
+				for (i, c) in bytes[0..HEADER_SIZE as usize].iter().enumerate() {
+					d[i] = *c;
+				}
+			});
+
+			// COPY DATA
 			if morePackets == true {
-				self.port_signpost_tock.master_tx_buffer.take().map(|port_buffer|{
-					let d = &mut port_buffer.as_mut()[0..MAX_DATA_LEN as usize];
-						
-
-					});
-			}
-			else {
-				self.port_signpost_tock.master_tx_buffer.take().map(|port_buffer|{
-					let d = &mut port_buffer.as_mut()[0..toSend as usize];
+				self.port_signpost_tock.master_tx_buffer.map(|port_buffer|{
+					let d = &mut port_buffer.as_mut()[START..I2C_MAX_LEN as usize];
+					for (i, c) in packet.data[0..(MAX_DATA_LEN-1) as usize].iter().enumerate() {
+						d[i] = *c;
+					}	
 				});
 			}
-
+			else {
+				self.port_signpost_tock.master_tx_buffer.map(|port_buffer|{
+					let d = &mut port_buffer.as_mut()[START..(START as u16 +toSend) as usize];
+					for (i, c) in packet.data[0..toSend as usize].iter().enumerate() {
+						d[i] = *c;
+					}	
+				});
+			}
+		
+			// SEND I2C message and update bytes left to send
 			if morePackets == true {
 				let rc = self.port_signpost_tock.i2c_master_write(dest, I2C_MAX_LEN);	
 				
@@ -179,15 +208,13 @@ impl<'a> SignbusIOInterface<'a> {
 				if rc != ReturnCode::SUCCESS { return rc; } 
 
 				toSend = 0;
-
 			}
-	
-
 		}
 
+		if debug == 1 {
+			//debug!("End of Function");
+		}
 
 		ReturnCode::SUCCESS
 	}
-
-	
 }

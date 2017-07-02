@@ -32,6 +32,7 @@ pub mod io;
 #[allow(dead_code)]
 mod test_take_map_cell;
 
+
 static mut SPI_READ_BUF: [u8; 64] = [0; 64];
 static mut SPI_WRITE_BUF: [u8; 64] = [0; 64];
 
@@ -438,7 +439,9 @@ pub unsafe fn reset_handler() {
     // test_take_map_cell::test_take_map_cell();
 	
 	signbus_io_interface.signbus_io_init(0x28);
-	
+
+	signbus_io_interface.signbus_io_send(0x28, false, &mut capsules::signbus_io_interface::BUFFER2, 256);
+
 
 
     // debug!("Initialization complete. Entering main loop");
