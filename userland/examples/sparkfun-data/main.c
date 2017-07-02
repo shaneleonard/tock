@@ -46,8 +46,64 @@ void ble_address_set (void) {
 
 uint16_t _char_handle = 0;
 uint16_t _char_decl_handle = 0;
+uint16_t _char_desc_cccd_handle = 0;
 
 char get[] = "GET https://j2x.us/\r\nhost: j2x.us\r\n\r\n";
+
+
+char post[512];
+int post_len = 0;
+
+char AIO_KEY[] =  "3e83a80b0ed94a338a3b3d26998b0dbe";
+char USERNAME[] = "bradjc";
+char FEED_NAME[] = "hail-test";
+
+// https://io.adafruit.com/api/v2/bradjc/feeds/hail-test/data
+
+// Host: io.adafruit.com
+// User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:54.0) Gecko/20100101 Firefox/54.0
+// Accept: application/json
+// Accept-Language: en-US,en;q=0.5
+// Accept-Encoding: gzip, deflate, br
+// Referer: https://io.adafruit.com/api/docs/
+// Content-Type: application/json
+// X-AIO-Key: 3e83a80b0ed94a338a3b3d26998b0dbe
+// Content-Length: 14
+// Cookie: __cfduid=d18521af95b5c0753730471818c713c2d1498936869; _ga=GA1.2.379251670.1498936871; _gid=GA1.2.1181161821.1498936871; _adafruit_accounts_session=NEo2T2xTNmxZQ3pTVC9DZE9KSTVrTHZPZXFhOWp2TDdLNmV5TEhWZmtLUG90M1B2YlJCdjNZWmNLOHl4SWZDbXU1ZFlpamlwVzBKSEtTMktkeFg3UDZWK3RPOUdqRU5KUmIvWWgyMDdyYkVrSS9EREtwa29GVW1ia1JqTFFDV3dtdmRVYk5wM1BrUFlrMmhiMCtCeXlMczlZNHJiWklGME15ZFlpdDRPU2hjYUoyUkpRc2QyeG8waHNrcS80WHpFdlpnOXBqRFVISEtNaWN1MmVOOVp1cHNTdEhLWjdpdjlxalZPRlNzbElDbEg1d291UFJITHRGVGQrcGFQNG9iRlZOeG5MOU1ZcEVXSUYxS0dsUU1mWWs4eHZLMUhzUXZWZVZmL2p2ckVEZlltUmNZR0FYUnJCenBtYjE1WENSZzdFbk1ydE0xajdtaXQ3b3QwTk01djExK0RDckN4UTlwRjk2QVRFQk02MjdjPS0tVzFOZ09LeUZ4clVlcmh0MmRmM1lYZz09--9ffe48b888ac2e2dfb24413e1a744b32ec49b40e; logged_in=1; _accounts_session_id=IjI0YjViODI1MGZjYjYzYTU1YTgwZGY2OGNiMDNkODVmIg%3D%3D--e83ebb52c031cb475cfdd8ae58e4d51dde583152; accounts_remember_user_token=W1s2NTM5MzZdLCIkMmEkMTAkQ3hWS0VTeFh0NUZySTZ1Y3NKS3VvTyIsIjE0OTg5MzY5NDguMTczNCJd--79289848f1fbbf0bd5e861405d9eee48f6ccb563; _session_id=11a4075b99ee424b7385de5ab638f023
+// Connection: keep-alive
+
+void init_post (void) {
+  int written = snprintf(post, 512,
+                         "POST /api/v2/%s/feeds/%s/data HTTP/1.1\r\n"
+                         "Host: io.adafruit.com\r\n"
+                         "X-AIO-Key: %s\r\n"
+                         "Content-Type: application/x-www-form-urlencoded\r\n"
+                         "Content-Length: 7\r\n"
+                         "\r\n"
+                         "value=7",
+                         USERNAME, FEED_NAME, AIO_KEY);
+  if (written > 512) {
+    printf("umm, couldn't fit post.");
+  }
+  post_len = written;
+}
+
+// request = [
+//   "POST /input/38EMzQw841IM8NbgLnqp HTTP/1.1",
+//   "Host: data.sparkfun.com",
+//   "Phant-Private-Key: oMkn59yMmRFeoXyl06Rv",
+//   # "Accept-Language: en-US,en;q=0.5",
+//   "Content-Type: application/x-www-form-urlencoded",
+//   "Content-Length: 33",
+//   # "Connection: keep-alive",
+//   # "User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64; rv:54.0) Gecko/20100101 Firefox/54.0",
+//   # "Connection: keep-alive",
+//   # "Pragma: no-cache",
+//   # "Cache-Control: no-cache",
+//   "",
+//   "humidity=15.07&lux=7.01&temp=4.91",
+
+// ]
 
 
 int _write_offset = 0;
@@ -65,7 +121,7 @@ void write_http_string_loop () {
 
   if (_write_state == 0) {
 
-    int len = sizeof(get) - 1 - _write_offset;
+    int len = post_len - _write_offset;
     if (len > 18) {
       len = 18;
     }
@@ -79,13 +135,13 @@ void write_http_string_loop () {
     // write_params.flags      = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE;
     write_params.offset     = _write_offset;
     write_params.len        = len;
-    write_params.p_value    = get + _write_offset;
+    write_params.p_value    = post + _write_offset;
 
 
 
     _write_offset += len;
 
-    if (_write_offset >= sizeof(get) - 1) {
+    if (_write_offset >= post_len) {
       _write_state = 1;
     }
 
@@ -104,7 +160,7 @@ void write_http_string_loop () {
     buf[1] = 0;
 
     write_params.write_op = BLE_GATT_OP_WRITE_REQ;
-    write_params.handle   = _char_decl_handle;
+    write_params.handle   = _char_desc_cccd_handle;
     write_params.offset   = 0;
     write_params.len      = sizeof(buf);
     write_params.p_value  = buf;
@@ -126,6 +182,53 @@ void write_http_string () {
   _write_state = 3;
   write_http_string_loop();
 }
+
+
+uint8_t body[512];
+uint8_t body_len = 0;
+
+void start_read () {
+  uint32_t err_code;
+  body_len = 0;
+
+  // do a read to get the data
+  err_code = sd_ble_gattc_read(conn_handle, _char_handle, 0);
+  if (err_code != NRF_SUCCESS) {
+    printf("error doing read %i\n", err_code);
+  }
+}
+
+void continue_read (const ble_gattc_evt_read_rsp_t* p_read_rsp) {
+  uint32_t err_code;
+  // printf("offset: %i, len: %i\n", p_read_rsp->offset, p_read_rsp->len);
+        // // for (int i=0; i<p_read_rsp->len; i++) {
+        // //   printf("%02x", p_read_rsp->data[i]);
+        // // }
+        // // printf("\n");
+        // // printf("%s\n", p_read_rsp->data);
+        // printf("%.*s\n", p_read_rsp->len, p_read_rsp->data);
+        //
+        //
+  if (p_read_rsp->offset <= 512 && p_read_rsp->offset + p_read_rsp->len <= 512) {
+    printf("copying into buffer %i %i\n", p_read_rsp->offset, p_read_rsp->len);
+    memcpy(body+p_read_rsp->offset, p_read_rsp->data, p_read_rsp->len);
+    body_len += p_read_rsp->len;
+  }
+
+  if (p_read_rsp->len == 22) {
+    err_code = sd_ble_gattc_read(conn_handle, _char_handle, p_read_rsp->offset + p_read_rsp->len);
+    if (err_code != NRF_SUCCESS) {
+      printf("error doing read %i\n", err_code);
+    }
+  } else {
+    printf("%.*s\n", body_len, body);
+  }
+}
+// const ble_gattc_evt_read_rsp_t* p_read_rsp;
+
+//         p_read_rsp = &(p_ble_evt->evt.gattc_evt.params.read_rsp);
+
+//         continue_read(p_read_rsp);
 
 
 void ble_evt_user_handler (ble_evt_t* p_ble_evt) {
@@ -180,7 +283,7 @@ void ble_evt_user_handler (ble_evt_t* p_ble_evt) {
       } else {
 
 
-        int i;
+        // int i;
         const ble_gattc_evt_char_disc_rsp_t* p_char_disc_rsp;
 
         p_char_disc_rsp = &(p_ble_evt->evt.gattc_evt.params.char_disc_rsp);
@@ -191,29 +294,175 @@ void ble_evt_user_handler (ble_evt_t* p_ble_evt) {
         };
 
         // Iterate through the characteristics and find the correct one.
-        for (i = 0; i < p_char_disc_rsp->count; i++) {
+        for (int i = 0; i < p_char_disc_rsp->count; i++) {
           printf("char: uuid: 0x%x type: 0x%x\n", p_char_disc_rsp->chars[i].uuid.uuid, p_char_disc_rsp->chars[i].uuid.type);
           if (BLE_UUID_EQ(&httpget_characteristic_uuid, &(p_char_disc_rsp->chars[i].uuid))) {
-            printf("found char handle 0x%x\n", p_char_disc_rsp->chars[i].handle_decl);
+            // printf("found char handle 0x%x\n", p_char_disc_rsp->chars[i].handle_decl);
             _char_handle = p_char_disc_rsp->chars[i].handle_value;
             _char_decl_handle = p_char_disc_rsp->chars[i].handle_decl;
+            printf("found char handle 0x%x\n", _char_handle);
+            printf("found decl handle 0x%x\n", _char_decl_handle);
             // prinp_char_disc_rsp->chars[i].handle_decl;
 
 
 
-            _write_offset = 0;
-            write_http_string();
+            // write_http_string();
+
+
+            // sd_ble_gattc_descriptors_discover
+
+
+            ble_gattc_handle_range_t descriptor_handle;
+            descriptor_handle.start_handle = _char_handle + 1;
+            descriptor_handle.end_handle = _char_handle + 1;
+
+            err_code = sd_ble_gattc_descriptors_discover(conn_handle, &descriptor_handle);
+            if (err_code != NRF_SUCCESS) {
+              printf("error getting descriptors %i\n", err_code);
+            }
+
 
 
             break;
           }
         }
       }
+
+
+
+      break;
+    }
+
+    case BLE_GATTC_EVT_DESC_DISC_RSP: {
+      if (p_ble_evt->evt.gattc_evt.gatt_status != BLE_GATT_STATUS_SUCCESS) {
+        printf("descriptor not found\n");
+      } else {
+
+
+        // int i;
+        const ble_gattc_evt_desc_disc_rsp_t* p_desc_disc_rsp;
+
+        p_desc_disc_rsp = &(p_ble_evt->evt.gattc_evt.params.desc_disc_rsp);
+
+        printf("count: %i\n", p_desc_disc_rsp->count);
+
+        for (int i = 0; i < p_desc_disc_rsp->count; i++) {
+          printf("desc: uuid: 0x%x type: 0x%x\n", p_desc_disc_rsp->descs[i].uuid.uuid, p_desc_disc_rsp->descs[i].uuid.type);
+          // printf("desc: ")
+          //
+
+
+          if (p_desc_disc_rsp->descs[i].uuid.uuid == 0x2902) {
+            // Found the CCCD descriptor
+            _char_desc_cccd_handle = p_desc_disc_rsp->descs[i].handle;
+            printf("desc handle 0x%x\n", _char_desc_cccd_handle);
+
+            write_http_string();
+
+            break;
+          }
+
+
+          // if (BLE_UUID_EQ(&httpget_characteristic_uuid, &(p_char_disc_rsp->chars[i].uuid))) {
+          //   printf("found char handle 0x%x\n", p_char_disc_rsp->chars[i].handle_decl);
+          //   _char_handle = p_char_disc_rsp->chars[i].handle_value;
+          //   _char_decl_handle = p_char_disc_rsp->chars[i].handle_decl;
+          //   // prinp_char_disc_rsp->chars[i].handle_decl;
+
+
+
+          //   // write_http_string();
+
+
+          //   sd_ble_gattc_descriptors_discover
+
+
+          //   ble_gattc_handle_range_t descriptor_handle;
+          //   descriptor_handle.start_handle = _char_handle + 1;
+          //   descriptor_handle.end_handle = _char_handle + 1;
+
+          //   err_code = sd_ble_gattc_descriptors_discover(p_ans->conn_handle, &descriptor_handle);
+          //   if (err_code != NRF_SUCCESS) {
+          //     printf("error getting descriptors %i\n", err_code);
+          //   }
+
+
+
+          //   break;
+          // }
+        }
+
+
+
+      }
+
+
+
       break;
     }
 
     case BLE_GATTC_EVT_WRITE_RSP: {
       write_http_string_loop();
+      break;
+    }
+
+    case BLE_GATTC_EVT_HVX: {
+      // Got notification
+
+      if (p_ble_evt->evt.gattc_evt.gatt_status != BLE_GATT_STATUS_SUCCESS) {
+        printf("notification bad???\n");
+      } else {
+
+        const ble_gattc_evt_hvx_t* p_hvx_evt;
+
+        p_hvx_evt = &(p_ble_evt->evt.gattc_evt.params.hvx);
+
+        printf("notify handle: 0x%x\n", p_hvx_evt->handle);
+
+        if (p_hvx_evt->handle == _char_handle) {
+          printf("got notification for handle we know\n");
+
+          start_read();
+        }
+      }
+
+      break;
+    }
+
+    case BLE_GATTC_EVT_READ_RSP: {
+      if (p_ble_evt->evt.gattc_evt.gatt_status != BLE_GATT_STATUS_SUCCESS) {
+        printf("read bad???\n");
+      } else {
+
+
+
+        const ble_gattc_evt_read_rsp_t* p_read_rsp;
+
+        p_read_rsp = &(p_ble_evt->evt.gattc_evt.params.read_rsp);
+
+        continue_read(p_read_rsp);
+
+        // printf("read handle: 0x%x\n", p_read_rsp->handle);
+
+
+        // printf("offset: %i, len: %i\n", p_read_rsp->offset, p_read_rsp->len);
+        // // for (int i=0; i<p_read_rsp->len; i++) {
+        // //   printf("%02x", p_read_rsp->data[i]);
+        // // }
+        // // printf("\n");
+        // // printf("%s\n", p_read_rsp->data);
+        // printf("%.*s\n", p_read_rsp->len, p_read_rsp->data);
+
+        // if (p_hvx_evt->handle == _char_handle) {
+        //   printf("got notification for handle we know\n");
+
+        //   // do a read to get the data
+        //   err_code = sd_ble_gattc_read(conn_handle, _char_handle, 0);
+        //   if (err_code != NRF_SUCCESS) {
+        //     printf("error doing read %i\n", err_code);
+        //   }
+        // }
+      }
       break;
     }
 
@@ -490,6 +739,8 @@ int main (void) {
   uint32_t err_code;
 
   printf("[BLE] Find Gateway\n");
+
+  init_post();
 
   // // Setup BLE
   // conn_handle = simple_ble_init(&ble_config)->conn_handle;
