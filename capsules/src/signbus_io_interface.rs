@@ -131,7 +131,7 @@ impl<'a> SignbusIOInterface<'a> {
 			flags:				flags,
 			src:				self.this_device_address.get(),
 			sequence_number:	self.htons(self.sequence_number.get() as u16),
-			length:				self.htons(numPackets * (HEADER_SIZE + len)),
+			length:				self.htons(numPackets * HEADER_SIZE + len),
 			fragment_offset:	0 as u16,
 		};
 
