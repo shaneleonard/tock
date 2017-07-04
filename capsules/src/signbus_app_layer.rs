@@ -9,30 +9,50 @@ use kernel::common::take_cell::{MapCell, TakeCell};
 use kernel::hil;
 use kernel::hil::gpio;
 use kernel::hil::time;
-use port_signpost_tock;
+// Capsules
+use signbus_protocol_layer;
+
+pub static mut BUFFER0: [u8; 256] = [0; 256];
+pub static mut BUFFER1: [u8; 256] = [0; 256];
+pub static mut BUFFER2: [u8; 256] = [1; 256];
 
 
-pub struct SignbusIOInterface<'a> {
-	port_signpost_tock: 	&'a port_signpost_tock::PortSignpostTock<'a>,
-	this_device_address:	Cell<u8>,
+pub struct App {
+	callback: Option<Callback>,
+	master_tx_buffer: Option<AppSlice<Shared, u8>>,
+	master_rx_buffer: Option<AppSlice<Shared, u8>>,
+	slave_tx_buffer: Option<AppSlice<Shared, u8>>,
+	slave_rx_buffer: Option<AppSlice<Shared, u8>>,
 }
 
-impl<'a> SignbusIOInterface<'a,> {
-	pub fn new(port_signpost_tock: &'a port_signpost_tock::PortSignpostTock<'a>
+impl Default for App {
+	fn default() -> App {
+		App {
+			callback: None,
+			master_tx_buffer: None,
+			master_rx_buffer: None,
+			slave_tx_buffer: None,
+			slave_rx_buffer: None,
+		}
+	}
+}
+
+pub struct SignbusAppLayer<'a> {
+	signbus_protocol_layer: 	&'a signbus_protocol_layer::SignbusProtocolLayer<'a>,
+}
+
+impl<'a> SignbusAppLayer<'a,> {
+	pub fn new(signbus_protocol_layer: &'a signbus_protocol_layer::SignbusProtocolLayer<'a>
 	
-	) -> SignbusIOInterface <'a> {
+	) -> SignbusAppLayer <'a> {
 		
-		SignbusIOInterface {
-			port_signpost_tock:  		port_signpost_tock,
-			this_device_address:		Cell::new(0),	
+		SignbusAppLayer {
+			signbus_protocol_layer:  		signbus_protocol_layer,
 		}
 	}
 
-	pub fn signbus_io_init(&self, address: u8) {
-		self.this_device_address.set(address);
-		self.port_signpost_tock.init(address);
-			
-		debug!("Address: {}", self.this_device_address.get());
+	pub fn signbus_app_send(&self, address: u8) {
+		//self.signbus_protocol_layer.signbus_protocol_send(address);
 	}
 	
 }

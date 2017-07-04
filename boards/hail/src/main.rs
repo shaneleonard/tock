@@ -387,6 +387,13 @@ pub unsafe fn reset_handler() {
 			&mut capsules::signbus_io_interface::BUFFER1
 		));
 
+	// Signbus Protocol Layer
+	let signbus_protocol_layer = static_init!(
+		capsules::signbus_protocol_layer::SignbusProtocolLayer<'static>,
+		capsules::signbus_protocol_layer::SignbusProtocolLayer::new(signbus_io_interface,
+			&mut capsules::signbus_protocol_layer::BUFFER0,
+			&mut capsules::signbus_protocol_layer::BUFFER1
+		));
 
 /* 
 	let port_signpost_tock_virtual_alarm = static_init!(
@@ -451,11 +458,11 @@ pub unsafe fn reset_handler() {
     // Uncomment to measure overheads for TakeCell and MapCell:
     // test_take_map_cell::test_take_map_cell();
 	
-	signbus_io_interface.signbus_io_init(0x28);
+	//signbus_io_interface.signbus_io_init(0x28);
 
-	signbus_io_interface.signbus_io_send(0x28, false, &mut capsules::signbus_io_interface::BUFFER2, 256);
+	//signbus_io_interface.signbus_io_send(0x28, false, &mut capsules::signbus_io_interface::BUFFER2, 256);
 
-
+	signbus_protocol_layer.signbus_protocol_send(0x28, &mut capsules::signbus_protocol_layer::BUFFER2, 256);
 
     // debug!("Initialization complete. Entering main loop");
     kernel::main(&hail, &mut chip, load_processes(), &hail.ipc);

@@ -3,36 +3,43 @@
 /// By: Justin Hsieh
 
 use core::cell::Cell;
-use core::cmp;
 use kernel::{AppId, AppSlice, Callback, Driver, ReturnCode, Shared};
 use kernel::common::take_cell::{MapCell, TakeCell};
 use kernel::hil;
-use kernel::hil::gpio;
-use kernel::hil::time;
+// Capsules
 use port_signpost_tock;
+use signbus_io_interface;
 
+pub static mut BUFFER0: [u8; 256] = [0; 256];
+pub static mut BUFFER1: [u8; 256] = [0; 256];
+pub static mut BUFFER2: [u8; 256] = [1; 256];
 
-pub struct SignbusIOInterface<'a> {
-	port_signpost_tock: 	&'a port_signpost_tock::PortSignpostTock<'a>,
-	this_device_address:	Cell<u8>,
+pub struct SignbusProtocolLayer<'a> {
+	signbus_io_interface: 	&'a signbus_io_interface::SignbusIOInterface<'a>,
+	buf0:					TakeCell <'static, [u8]>,
+	buf1:					TakeCell <'static, [u8]>,
 }
 
-impl<'a> SignbusIOInterface<'a,> {
-	pub fn new(port_signpost_tock: &'a port_signpost_tock::PortSignpostTock<'a>
-	
-	) -> SignbusIOInterface <'a> {
+impl<'a> SignbusProtocolLayer<'a,> {
+	pub fn new(signbus_io_interface: &'a signbus_io_interface::SignbusIOInterface<'a>,
+				buf0:		&'static mut [u8],
+				buf1: 		&'static mut [u8]) -> SignbusProtocolLayer <'a> {
 		
-		SignbusIOInterface {
-			port_signpost_tock:  		port_signpost_tock,
-			this_device_address:		Cell::new(0),	
+		SignbusProtocolLayer {
+			signbus_io_interface:  		signbus_io_interface,
+			buf0:				TakeCell::new(buf0),
+			buf1:				TakeCell::new(buf1),
 		}
 	}
 
-	pub fn signbus_io_init(&self, address: u8) {
-		self.this_device_address.set(address);
-		self.port_signpost_tock.init(address);
-			
-		debug!("Address: {}", self.this_device_address.get());
+	pub fn signbus_protocol_send(&self, 
+								address: u8,
+								data: &'static mut [u8],
+								len: u16) -> ReturnCode {
+		
+		let encrypted: bool = false;
+		debug!("Signbus Protocol Send");
+		self.signbus_io_interface.signbus_io_send(address, encrypted, data, len)
 	}
 	
 }

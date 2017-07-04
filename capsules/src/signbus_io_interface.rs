@@ -6,12 +6,10 @@
 use core::mem;
 use core::slice;
 use core::cell::Cell;
-//use core::cmp;
 use kernel::{ReturnCode};
 use kernel::common::take_cell::{MapCell, TakeCell};
-//use kernel::hil;
-//use kernel::hil::gpio;
-//use kernel::hil::time;
+use kernel::hil;
+// Capsules
 use port_signpost_tock;
 
 pub static mut BUFFER0: [u8; 256] = [0; 256];
@@ -105,21 +103,21 @@ impl<'a> SignbusIOInterface<'a> {
 		// update sequence number
 		self.sequence_number.set(self.sequence_number.get() + 1);
 		
-		// number of bytes left to be sent
-		let mut toSend: u16 = len;
 		// size of header (sent everytime)
-		let mut HEADER_SIZE: u16 = mem::size_of::<SignbusNetworkHeader>() as u16;
+		let header_size: u16 = mem::size_of::<SignbusNetworkHeader>() as u16;
 		// max data in one packet
-		let MAX_DATA_LEN: u16 = I2C_MAX_LEN - HEADER_SIZE;
+		let max_data_len: u16 = I2C_MAX_LEN - header_size;
+		// number of bytes left to be sent
+		let mut to_send: u16 = len;
 		// number of packets to be sent
-		let mut numPackets: u16 = len/MAX_DATA_LEN + 1;		
-		if len % MAX_DATA_LEN == 0 {
-			numPackets = numPackets - 1; 
+		let mut num_packets: u16 = len/max_data_len + 1;		
+		if len % max_data_len == 0 {
+			num_packets = num_packets - 1; 
 		}
 	
 		// Network Flags
 		let flags: SignbusNetworkFlags = SignbusNetworkFlags {
-			is_fragment:	false, // toSend > MAX_DATA_LEN
+			is_fragment:	false, // to_send > max_data_len
 			is_encrypted:	encrypted,
 			rsv_wire_bit5:	false,
 			rsv_wire_bit4:	false,
@@ -130,8 +128,8 @@ impl<'a> SignbusIOInterface<'a> {
 		let header: SignbusNetworkHeader = SignbusNetworkHeader {
 			flags:				flags,
 			src:				self.this_device_address.get(),
-			sequence_number:	self.htons(self.sequence_number.get() as u16),
-			length:				self.htons(numPackets * HEADER_SIZE + len),
+			sequence_number:	self.htons(self.sequence_number.get()),
+			length:				self.htons(num_packets * header_size + len),
 			fragment_offset:	0 as u16,
 		};
 
@@ -145,58 +143,58 @@ impl<'a> SignbusIOInterface<'a> {
 			//debug!("{:?}", data.len());
 			//debug!("{:?}", packet.data.len());
 			//debug!("data length: {} ", packet.data.len());
-			//debug!("toSend: {} ", toSend);
-			//debug!("MAX_DATA_LEN: {} ", MAX_DATA_LEN);
-			//debug!("HEADER_SIZE: {} ", HEADER_SIZE);
-			//debug!("numPackets: {} ", numPackets);
+			//debug!("to_send: {} ", to_send);
+			//debug!("max_data_len: {} ", max_data_len);
+			//debug!("header_size: {} ", header_size);
+			//debug!("num_packets: {} ", num_packets);
 		}
 		
 		
-		while toSend > 0 {
-			let morePackets: bool = toSend > MAX_DATA_LEN;;
-			let mut START: usize = (HEADER_SIZE + 1) as usize; 
+		while to_send > 0 {
+			let more_packets: bool = to_send > max_data_len;;
+			let mut START: usize = (header_size + 1) as usize; 
 
 			// UPDATE HEADER
-			packet.header.flags.is_fragment = morePackets;
-			packet.header.fragment_offset = self.htons(len-toSend);
+			packet.header.flags.is_fragment = more_packets;
+			packet.header.fragment_offset = self.htons(len-to_send);
 
 			// COPY HEADER
 			self.port_signpost_tock.master_tx_buffer.map(|port_buffer|{
-				let d = &mut port_buffer.as_mut()[0..HEADER_SIZE as usize];
+				let d = &mut port_buffer.as_mut()[0..header_size as usize];
 				let bytes: &[u8]= unsafe { as_byte_slice(&packet.header) };
-				for (i, c) in bytes[0..HEADER_SIZE as usize].iter().enumerate() {
+				for (i, c) in bytes[0..header_size as usize].iter().enumerate() {
 					d[i] = *c;
 				}
 			});
 
 			// COPY DATA
-			if morePackets == true {
+			if more_packets == true {
 				self.port_signpost_tock.master_tx_buffer.map(|port_buffer|{
 					let d = &mut port_buffer.as_mut()[START..I2C_MAX_LEN as usize];
-					for (i, c) in packet.data[0..(MAX_DATA_LEN-1) as usize].iter().enumerate() {
+					for (i, c) in packet.data[0..(max_data_len-1) as usize].iter().enumerate() {
 						d[i] = *c;
 					}	
 				});
 			}
 			else {
 				self.port_signpost_tock.master_tx_buffer.map(|port_buffer|{
-					let d = &mut port_buffer.as_mut()[START..(START as u16 +toSend) as usize];
-					for (i, c) in packet.data[0..toSend as usize].iter().enumerate() {
+					let d = &mut port_buffer.as_mut()[START..(START as u16 + to_send) as usize];
+					for (i, c) in packet.data[0..to_send as usize].iter().enumerate() {
 						d[i] = *c;
 					}	
 				});
 			}
 		
 			// SEND I2C message and update bytes left to send
-			if morePackets == true {
+			if more_packets == true {
 				let rc = self.port_signpost_tock.i2c_master_write(dest, I2C_MAX_LEN);	
 				if rc != ReturnCode::SUCCESS { return rc; } 
-				toSend -= MAX_DATA_LEN;
+				to_send -= max_data_len;
 			}
 			else {
-				let rc = self.port_signpost_tock.i2c_master_write(dest, toSend);	
+				let rc = self.port_signpost_tock.i2c_master_write(dest, to_send);	
 				if rc != ReturnCode::SUCCESS { return rc; } 
-				toSend = 0;
+				to_send = 0;
 			}
 		}
 

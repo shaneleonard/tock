@@ -3,13 +3,10 @@
 /// By: Justin Hsieh
 
 use core::cell::Cell;
-use core::cmp;
-use kernel::{AppId, AppSlice, Callback, Driver, ReturnCode, Shared};
-use kernel::common::take_cell::{MapCell, TakeCell};
+use kernel::{ReturnCode};
+use kernel::common::take_cell::{TakeCell};
 use kernel::hil;
-use kernel::hil::gpio;
 use kernel::hil::i2c;
-use kernel::hil::time;
 
 // Buffers to use for I2C messages
 pub static mut BUFFER0: [u8; 256] = [0; 256];
