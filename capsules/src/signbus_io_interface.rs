@@ -1,7 +1,9 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 /// Kernel implementation of signbus_io_interface
 /// apps/libsignpost/signbus_io_interface.c -> kernel/tock/capsules/src/signbus_io_interface.rs
 /// By: Justin Hsieh
-
 
 use core::mem;
 use core::slice;

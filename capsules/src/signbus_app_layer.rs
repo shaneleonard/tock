@@ -1,6 +1,10 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 /// Kernel implementation of signbus_app_layer
 /// apps/libsignpost/signbus_app_layer.c -> kernel/tock/capsules/src/signbus_app_layer.rs
 /// By: Justin Hsieh
+
 
 use core::cell::Cell;
 use core::cmp;
@@ -37,6 +41,26 @@ impl Default for App {
 	}
 }
 
+pub enum signbus_frame_type_t {
+    NotificationFrame = 0,
+    CommandFrame = 1,
+    ResponseFrame = 2,
+    ErrorFrame = 3,
+}
+
+pub enum signbus_api_type_t {
+    InitializationApiType = 1,
+    StorageApiType = 2,
+    NetworkingApiType = 3,
+    ProcessingApiType = 4,
+    EnergyApiType = 5,
+    TimeLocationApiType = 6,
+    EdisonApiType = 7,
+    JsonApiType = 8,
+    WatchdogApiType = 9,
+    HighestApiType = 10,
+}
+
 pub struct SignbusAppLayer<'a> {
 	signbus_protocol_layer: 	&'a signbus_protocol_layer::SignbusProtocolLayer<'a>,
 }
@@ -51,8 +75,20 @@ impl<'a> SignbusAppLayer<'a,> {
 		}
 	}
 
-	pub fn signbus_app_send(&self, address: u8) {
+	pub fn signbus_app_send(&self, 
+							address: u8,
+							frame_type: signbus_frame_type_t,
+							api_type: signbus_api_type_t,
+							message_type: u8,
+							message_length: u16,
+							message: &'static mut [u8]) -> ReturnCode {
+		
+		let len: u16 = 1 + 1 + 1 + message_length;
+
+
+
 		//self.signbus_protocol_layer.signbus_protocol_send(address);
+		ReturnCode::SUCCESS
 	}
 	
 }
